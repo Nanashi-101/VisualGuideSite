@@ -1,0 +1,176 @@
+<Goals>
+- What XAMPP contains and what each part does
+- Installing XAMPP and starting Apache and MySQL
+- Where your files must live (`htdocs`) and how URLs map to folders
+- Writing and running your first PHP page
+- Using phpMyAdmin to create a database and import a `.sql` file
+- Setting up VS Code so it helps you instead of getting in the way
+</Goals>
+
+## What is XAMPP?
+
+XAMPP is a free bundle that turns your laptop into a web server. The name lists what is inside:
+
+| Letter | Program | Job |
+| --- | --- | --- |
+| **X** | Cross-platform | Runs on Windows, macOS and Linux |
+| **A** | Apache | The web server: receives HTTP requests and sends responses |
+| **M** | MySQL (actually **MariaDB**, a compatible copy) | The database server |
+| **P** | PHP | Runs your `.php` files |
+| **P** | Perl | Another language; not used in this course |
+
+It also includes **phpMyAdmin**, a website for managing your databases with buttons instead of typing SQL.
+
+<Note>
+On a real hosting server these programs are installed separately and run all the time. XAMPP is meant for **development** only: its default database user `root` has no password, which is fine on your laptop and dangerous on the internet.
+</Note>
+
+## Installing and starting it
+
+1. Download XAMPP for Windows from **apachefriends.org** and install it to the default folder `C:\xampp`. Keep the default components.
+2. Open the **XAMPP Control Panel** (`C:\xampp\xampp-control.exe`).
+3. Click **Start** next to **Apache** and **MySQL**. Both rows turn green and show their **ports**: Apache uses 80 (and 443 for HTTPS), MySQL uses 3306.
+4. Open `http://localhost` in your browser. The XAMPP dashboard means Apache works.
+5. Open `http://localhost/phpmyadmin`. If it loads, MySQL works too.
+
+<Warning title="Apache will not start?">
+Almost always another program already uses port 80 (Skype, IIS, another web server). Click **Netstat** in the Control Panel to see who uses it. Either close that program, or in Apache's **Config → httpd.conf** change `Listen 80` to `Listen 8080` and use `http://localhost:8080` from then on.
+</Warning>
+
+## htdocs: where your code lives
+
+Apache only serves files inside one folder, its **document root**: `C:\xampp\htdocs`. The URL path maps directly to folders inside it:
+
+| URL | File on disk |
+| --- | --- |
+| `http://localhost/` | `C:\xampp\htdocs\index.php` (or `index.html`) |
+| `http://localhost/test.php` | `C:\xampp\htdocs\test.php` |
+| `http://localhost/smw/index.php` | `C:\xampp\htdocs\smw\index.php` |
+| `http://localhost/fitness_center/` | `C:\xampp\htdocs\fitness_center\index.php` |
+
+If a URL points to a folder, Apache looks for `index.php` (then `index.html`) inside it. That is why every project in the course has an `index.php` as its start page.
+
+<Mochi>
+`htdocs` is the shop window. Only what you put in the window can be seen from the street. A file on your desktop is invisible to Apache, no matter how good it is.
+</Mochi>
+
+A good habit is **one folder per project**:
+
+<FileTree>{`
+C:\\xampp\\htdocs/
+  dashboard/                # XAMPP's own start page
+  phpmyadmin/               # not here, but reachable at /phpmyadmin
+  week1/                    # your exercises, one folder per week
+    forms.html
+    vars.php
+  smw/                      # the professor's project
+    index.php
+    config.php
+  fitness_center/           # the Kraftwerk project
+    index.php
+    config.php
+`}</FileTree>
+
+## Your first PHP page
+
+Create `C:\xampp\htdocs\hello.php` with this content:
+
+```php:hello.php
+<!DOCTYPE html>
+<html>
+<body>
+  <h1>Hello from HTML</h1>
+  <?php
+    $name = "Ishika";
+    echo "<p>Hello, $name! Today is " . date('l') . ".</p>";
+  ?>
+</body>
+</html>
+```
+
+Open `http://localhost/hello.php`. You should see both lines. Now right-click and choose **View page source**: the `<?php ... ?>` part is gone and replaced by the finished `<p>`. That proves PHP ran on the server.
+
+<Warning title="The three classic first mistakes">
+1. **Opening the file by double-clicking it.** The address bar then shows `file:///C:/xampp/...` and PHP does not run: you see raw code or nothing. Always go through `http://localhost/...`.
+2. **Saving as `hello.php.txt`.** Windows hides extensions by default. In File Explorer turn on *View → File name extensions*.
+3. **Forgetting to start Apache.** The browser then says "This site can't be reached".
+</Warning>
+
+### Checking your PHP setup
+
+Create `info.php` containing only `<?php phpinfo();` and open it. It prints the PHP version, the loaded extensions (look for `mysqli` and `pdo_mysql`) and where `php.ini` is. Delete the file afterwards: it reveals a lot about your system.
+
+## phpMyAdmin and databases
+
+Open `http://localhost/phpmyadmin`.
+
+### Creating a database
+
+1. Click **New** in the left panel.
+2. Type a name such as `smw` and choose the collation `utf8mb4_general_ci` (supports every language and emoji).
+3. Click **Create**.
+
+### Importing a .sql file
+
+The professor ships databases as `.sql` dump files (for example `SMW.sql`). A dump is a text file full of SQL commands that recreate the tables and data.
+
+1. Select the database on the left (or create it first).
+2. Open the **Import** tab, choose the `.sql` file and click **Import** at the bottom.
+3. The tables appear on the left. Click one and use **Browse** to see its rows.
+
+You can also import from the command line, which is how the fitness site's `install.sql` is meant to be run:
+
+```powershell
+C:\xampp\mysql\bin\mysql.exe -u root < C:\xampp\htdocs\fitness_center\install.sql
+```
+
+<Tip>
+phpMyAdmin's **SQL** tab lets you type any SQL and run it. When a query in your PHP does not work, copy it there (with real values filled in). The error message is usually much clearer.
+</Tip>
+
+## Setting up VS Code
+
+1. Install **Visual Studio Code**, then use **File → Open Folder** and open the project folder inside `htdocs` (not a single file). The sidebar then shows the whole project.
+2. Install the extension **PHP Intelephense**. It colours PHP, autocompletes functions and underlines errors *before* you run the page.
+3. Turn on **Auto Save** (*File → Auto Save*) so a browser reload always sees your latest code.
+4. Use **Emmet**: in an `.html` or `.php` file type `!` and press <kbd>Tab</kbd> to get a full HTML skeleton.
+
+Useful shortcuts: <kbd>Ctrl</kbd>+<kbd>/</kbd> comments a line, <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> moves a line, <kbd>Ctrl</kbd>+<kbd>D</kbd> selects the next match, <kbd>Shift</kbd>+<kbd>Alt</kbd>+<kbd>F</kbd> formats the file.
+
+## Turning on error messages
+
+When PHP hits an error it may show a blank page. During development you want to *see* errors. At the top of a file you are debugging, add:
+
+```php
+<?php
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+```
+
+XAMPP usually shows errors already. If something still fails silently, look at the Apache error log: in the Control Panel click **Logs → Apache (error.log)**. More in [Debugging & testing](/wiki/debugging).
+
+<Exercise title="Your own project folder">
+Create a folder `htdocs/practice` with an `index.php` that shows a heading "My practice area" and, using PHP, the current date in the format `22.11.2026` (hint: `date('d.m.Y')`). Open it at `http://localhost/practice/` without typing `index.php`.
+
+<Solution>
+```php:practice/index.php
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Practice</title></head>
+<body>
+  <h1>My practice area</h1>
+  <p>Today is <?php echo date('d.m.Y'); ?>.</p>
+</body>
+</html>
+```
+`http://localhost/practice/` works because Apache automatically serves `index.php` when the URL points to a folder.
+</Solution>
+</Exercise>
+
+<Exercise title="Import the SMW database">
+Create a database called `smw` in phpMyAdmin and import `SMW.sql` from the course files. How many tables does it have, and what is the only row in `users`?
+
+<Solution>
+Four tables: `contacts`, `faculties`, `students` and `users`. The `users` table has one row: username `admin`, password `admin` and email `admin@admin.admin`. Notice the password is stored in plain text. That is something we fix later in [Password hashing & 2FA](/wiki/passwords-2fa).
+</Solution>
+</Exercise>

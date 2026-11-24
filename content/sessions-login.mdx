@@ -1,0 +1,191 @@
+<Goals>
+- Why HTTP needs cookies and sessions to remember users
+- How `session_start()`, `$_SESSION` and the session cookie work together
+- The complete login flow: form → check → session → protected pages → logout
+- Protecting pages with a guard (`check.php` / `require_login()`)
+- Roles and permissions (member vs admin)
+- The classic mistakes: forgetting `exit`, session fixation, weak logout
+</Goals>
+
+## The problem: HTTP forgets
+
+Each HTTP request is independent. When you log in on `login.php` and then open `admin.php`, the server receives two unrelated requests. Nothing in the second one says "this is the person who just logged in". We need a way to **carry identity from one request to the next**.
+
+## Cookies
+
+A **cookie** is a small piece of text the server asks the browser to store and send back with every later request to the same site.
+
+```text
+Response from server:   Set-Cookie: PHPSESSID=7f3k9a…; HttpOnly; SameSite=Strict
+Every later request:    Cookie: PHPSESSID=7f3k9a…
+```
+
+You can see cookies in the browser: <kbd>F12</kbd> → **Application** (Chrome) or **Storage** (Firefox) → **Cookies**.
+
+Cookies live in the browser, so the user can read and change them. **Never store "logged in = yes" or a role in a cookie directly**; anyone could edit it to `admin`.
+
+## Sessions: data on the server, key in the cookie
+
+A **session** keeps the actual data **on the server** and only gives the browser a long random **session ID** in a cookie.
+
+```text
+Browser                         Server (PHP)
+cookie: PHPSESSID=7f3k9a…  ──▶  looks up file sess_7f3k9a…
+                                 ['user' => ['id' => 8, 'role' => 'admin']]
+```
+
+```php
+session_start();                       // 1. read the cookie and load that user's data (or start a new session)
+$_SESSION['user'] = ['id' => 8];       // 2. store something
+echo $_SESSION['user']['id'];          // 3. on any later request, after session_start(), it is still there
+```
+
+- `session_start()` must be called on **every page** that uses `$_SESSION`, and **before any output** (it sends a cookie header).
+- `$_SESSION` is a normal array that PHP saves automatically at the end of the request.
+- In XAMPP the data is stored as files in `C:\xampp\tmp`.
+
+<Mochi>
+A session is a coat check. You hand over your coat (your data) and get a small numbered ticket (the session cookie). Next time you just show the ticket. The ticket alone is worthless without the cloakroom, and if someone steals your ticket, they get your coat. That is why the ticket number must be long and random.
+</Mochi>
+
+## The login flow
+
+```text
+login form ──POST──▶ check credentials in DB
+                         ├─ wrong ─▶ show form + error
+                         └─ right ─▶ session_regenerate_id()
+                                     $_SESSION['user'] = …
+                                     redirect ─▶ dashboard.php
+dashboard.php ─▶ session_start(); is $_SESSION['user'] set?
+                         ├─ no  ─▶ redirect to login.php
+                         └─ yes ─▶ show the page
+logout.php ─▶ empty $_SESSION, destroy it, delete the cookie ─▶ redirect to login.php
+```
+
+### The professor's version (Week 3, Login/)
+
+The login script checks the credentials and stores the username:
+
+<Source file="Learning/Week3_Login/Login/login.php" from={4} to={34} />
+
+Every protected page includes a guard:
+
+<Source file="Learning/Week3_Login/Login/check.php" />
+
+And logout destroys the session:
+
+<Source file="Learning/Week3_Login/Login/logout.php" />
+
+This is the right **shape**. It has four problems worth understanding, because they are classic:
+
+| Problem | Where | Why it matters | Fix |
+| --- | --- | --- | --- |
+| SQL built from input | `login.php` line 19 | SQL injection: login without a password | Prepared statement |
+| Plain-text passwords | the `users` table | A database leak reveals every password | `password_hash` / `password_verify` |
+| `header()` without `exit` | `check.php` | **The rest of the protected page still runs and is sent to the browser!** The redirect header is there, but tools like curl ignore it and receive the full page. | Always `exit;` after a redirect |
+| Reads `$_SESSION['username']` before checking it exists | `check.php` line 5 | A warning on every unauthenticated visit | Check with `isset` or `??` first |
+
+<Warning title="header() does not stop your script">
+`header('Location: index.php');` only *adds* an instruction to the response. PHP keeps running the rest of the file. A browser follows the redirect quickly, so it *looks* protected, but the secret content was generated and sent anyway. **Every redirect that protects something must be followed by `exit;`.** The fitness site's `go()` helper does both in one call so it cannot be forgotten.
+</Warning>
+
+## The fitness version
+
+The fitness site keeps the same shape, fixes those problems, and adds a second step (2FA) between password and full login. The session helpers live in `config.php`:
+
+<Source file="Project/fitness_center/config.php" from={8} to={25} />
+
+- `session_set_cookie_params` makes the cookie `HttpOnly` (JavaScript cannot read it, which limits XSS damage) and `SameSite=Strict` (the browser does not send it with requests started from other sites, which blocks CSRF).
+- `me()` returns the logged-in user or `null`.
+- `require_login()` and `require_admin()` are the guards; one line at the top of a page.
+- `finish_login()` is the only place that ever creates a logged-in session.
+
+### Two session states
+
+The login page does **not** fully log the user in after the password. It stores a *pending* login under a different key:
+
+<Source file="Project/fitness_center/login.php" from={4} to={17} />
+
+```text
+$_SESSION['pre']   = password was right, 2FA code still missing   → can only open verify_2fa.php / setup_2fa.php
+$_SESSION['user']  = password and code were right                → can open protected pages
+```
+
+Every protected page checks `me()`, which only looks at `$_SESSION['user']`. Someone who knows the password but not the code is stuck at the `pre` stage. That is the whole idea of two-factor login, explained in [Password hashing & 2FA](/wiki/passwords-2fa).
+
+## Session fixation and session_regenerate_id
+
+An attacker could plant a session ID they know in your browser (for example through a link), wait for you to log in, and then use the same ID. Calling `session_regenerate_id(true)` right after a successful login gives you a **brand-new ID** and deletes the old session, so the planted one becomes worthless. The fitness site calls it both after the password step and after the code step.
+
+## Roles and permissions
+
+Being logged in answers "who are you?" (**authentication**). Being allowed to do something answers "what may you do?" (**authorisation**). The fitness site stores a `role` per user and checks it on the server:
+
+```php
+function require_admin() {
+    require_login();
+    if (me()['role'] !== 'admin') { http_response_code(403); exit('Admins only.'); }
+}
+```
+
+Hiding the "Admin" link for members is just politeness. The real protection is this check at the top of `admin.php`, because anybody can type the URL directly.
+
+The professor's `update_student.php` has its guard commented out (`//include("check.php");`), which means **anyone can edit students** without logging in. When you write a new admin page, adding the guard is the very first line, before anything else.
+
+## Logout done properly
+
+<Source file="Project/fitness_center/logout.php" from={1} to={14} />
+
+A complete logout does three things: empty the session data (`$_SESSION = []`), destroy the server-side session (`session_destroy()`) and delete the cookie in the browser (`setcookie` with a time in the past). The fitness site also asks for a valid Authenticator code before logging out, because the assignment requires 2FA "for login and logout", and it uses a POST form so that a link cannot log someone out.
+
+<Exercise title="A visit counter">
+Write `counter.php` that uses a session to count how many times *you* opened the page and shows "You have visited this page N times". Add a link `?reset=1` that sets it back to zero. Then open the page in a private window: what number does it show, and why?
+
+<Solution>
+```php:counter.php
+<?php
+session_start();
+if (isset($_GET['reset'])) {
+    $_SESSION['visits'] = 0;
+    header('Location: counter.php');
+    exit;
+}
+$_SESSION['visits'] = ($_SESSION['visits'] ?? 0) + 1;
+?>
+<p>You have visited this page <?= $_SESSION['visits'] ?> times.</p>
+<a href="?reset=1">Reset</a>
+```
+The private window starts at 1 because it has no session cookie yet, so PHP starts a **new** session with its own data. Sessions are per browser, not per computer. (A reset via GET is fine here because it only affects your own counter. For real data changes, use POST.)
+</Solution>
+</Exercise>
+
+<Exercise title="Protect a page correctly">
+Write `guard.php` containing a function `require_role(string $role)` that redirects to `login.php` when nobody is logged in and returns a 403 when the logged-in user has another role. Use it in `reports.php` so only admins can see it.
+
+<Solution>
+```php:guard.php
+<?php
+if (session_status() === PHP_SESSION_NONE) session_start();
+
+function require_role(string $role): void {
+    $user = $_SESSION['user'] ?? null;
+    if (!$user) {
+        header('Location: login.php');
+        exit;                                   // never forget this
+    }
+    if (($user['role'] ?? '') !== $role) {
+        http_response_code(403);
+        exit('You are not allowed to see this page.');
+    }
+}
+```
+```php:reports.php
+<?php
+require_once 'guard.php';
+require_role('admin');
+?>
+<h1>Secret reports</h1>
+```
+`session_status()` avoids a warning if another file already started the session. Both `exit` calls make sure nothing below the guard runs for the wrong person.
+</Solution>
+</Exercise>

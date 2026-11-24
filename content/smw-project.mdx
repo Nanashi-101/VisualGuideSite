@@ -1,0 +1,196 @@
+<Goals>
+- What the Student Management Web application (SMW) does and who uses it
+- The folder structure and what every file is for
+- The database and how the tables relate
+- How the user module shows students grouped by faculty
+- How the admin module implements login and CRUD, using Students as the example
+- What the code does well, what to improve, and how the fitness site evolves it
+</Goals>
+
+## What SMW is
+
+SMW is the professor's reference project for the course: a small web application to manage a university's **faculties** and **students**, with a public page and a password-protected admin area. The slides call these the **User Module** and the **Administrator Module**.
+
+| Module | Who | Can do |
+| --- | --- | --- |
+| User module | Any visitor | See students grouped by faculty, send a contact message, see the campus on a map |
+| Administrator module | Logged-in admin | Manage faculties, students (with photos) and admin users; read and delete contact messages |
+
+It uses exactly the technologies from the course: HTML forms, procedural PHP with **mysqli**, a MySQL database, CSS with variables and media queries, a bit of JavaScript for dark mode and the mobile menu.
+
+## Directory structure
+
+<FileTree>{`
+SMW_UserModule/                  # public website
+  index.php                      # students grouped by faculty + contact form + map
+  addContact.php                 # receives the contact form, inserts into contacts
+  config.php                     # database connection
+  index_template.html            # static design prototype of index.php
+  SMW.sql                        # database dump (structure + sample data)
+  Foto/
+    female.jpg                   # default profile pictures
+    male.jpg
+SMW_AdminModule/                 # admin area
+  index.php                      # login form (includes login.php)
+  login.php                      # checks username/password, starts session
+  check.php                      # guard: redirect to index.php if not logged in
+  logout.php                     # destroys the session
+  admin.php                      # dashboard with Home / Users / Contact tabs (iframes)
+  config.php                     # database connection
+  delete__contact.php            # list of contact messages with delete links
+  delete_contact.php             # deletes one message (?ID_Contact=…)
+  Faculties/
+    admin.php                    # add form + list + search
+    add_data.php  edit.php  delete.php  config.php
+  Students/
+    adminn.php                   # add form (with photo) + search + list
+    addStudent.php               # inserts a student with image
+    update_student.php           # edit form + update
+    delete_student.php           # deletes (?ID_Student=…)
+    check.php  config.php
+  Users/
+    admin.php  add_data.php  edit.php  delete.php  config.php
+`}</FileTree>
+
+### Patterns in this structure
+
+- **One folder per entity** (Faculties, Students, Users), each with the same set of files: list, add, edit, delete. Once you understand one folder, you understand all three. This is a very common way to organise CRUD code.
+- **One file per action.** `delete.php` only deletes and redirects; `edit.php` shows a form and updates. Each file is short and does one job.
+- **A config.php in each folder**, so every page can `include("config.php")` without worrying about paths. The trade-off: the database credentials are duplicated in five places, so changing the password means editing five files.
+
+<Note title="Deploy folder names">
+The admin dashboard links to `http://localhost/smw/Admin/Faculties/admin.php`, an **absolute** URL. That only works if you copy the module to `htdocs/smw/Admin/`. Relative links like `Faculties/admin.php` (which the Students link uses) work wherever the folder is placed. Prefer relative links inside a project.
+</Note>
+
+## The database
+
+<Source file="Learning/SMW_UserModule/SMW.sql" from={30} to={46} lang="sql" />
+
+```sql
+CREATE TABLE students (
+  ID_Student int(11) NOT NULL,            -- primary key, AUTO_INCREMENT
+  SName varchar(50) NOT NULL,
+  Surname varchar(50) NOT NULL,
+  Birthdate date DEFAULT NULL,
+  Address varchar(150) NOT NULL,
+  Description varchar(100) NOT NULL,
+  ID_Faculty int(11) NOT NULL,            -- foreign key → faculties.ID_Faculty
+  image longblob DEFAULT NULL,            -- the photo itself, as binary data
+  name varchar(100) DEFAULT NULL          -- the original file name of the photo
+);
+-- users(uid, username UNIQUE, password, email)
+```
+
+```text
+faculties 1 ──────── * students
+(ID_Faculty, Faculty)   (…, ID_Faculty FK)
+
+contacts                 users
+(ID_Contact, Subject,    (uid, username, password, email)
+ Message, Email)
+```
+
+Things to notice:
+
+- The dump defines keys at the end with `ALTER TABLE … ADD PRIMARY KEY` and `ADD CONSTRAINT FK_StudentFakultet FOREIGN KEY`. phpMyAdmin exports that way; writing them inside `CREATE TABLE` (as the fitness site does) is equivalent.
+- `contacts.Message` is only `varchar(50)`, so longer messages are cut off or rejected. Field sizes are design decisions; 500 is more realistic.
+- `users.password` is `varchar(50)` and holds plain text. A bcrypt hash needs 60 characters, so the column must grow to 255 when you add hashing.
+- The Week 3 version of `SMW.sql` adds `users_auth`, `user_2fa` and `user_2fa_backup_codes` for the Google Authenticator login.
+
+## The user module
+
+### Reading and grouping
+
+<Source file="Learning/SMW_UserModule/index.php" from={1} to={37} />
+
+1. Connect with `mysqli_connect` and stop with `die()` on failure.
+2. One `LEFT JOIN` query fetches every faculty with its students, sorted by faculty then name. `LEFT` keeps faculties that have no students.
+3. A `while` loop groups the flat rows into `$faculty_students['Faculty name'] = [rows…]`.
+
+### Printing
+
+The template part uses the alternative `foreach (…):` / `endforeach;` syntax and escapes everything with `htmlspecialchars`. Images stored as BLOBs are turned into a **data URI** so they can be shown without a separate file:
+
+<Source file="Learning/SMW_UserModule/index.php" from={262} to={288} lang="php" />
+
+`'data:image/jpeg;base64,' . base64_encode($student["image"])` embeds the image bytes directly in the HTML. It works, but every page view sends every photo inside the HTML, which gets slow with many students.
+
+### The contact form
+
+The form posts to `addContact.php`, which checks for empty fields, inserts and redirects after 5 seconds with JavaScript:
+
+<Source file="Learning/SMW_UserModule/addContact.php" from={15} to={30} />
+
+## The admin module
+
+### Login
+
+`index.php` includes `login.php` (which handles the POST) and redirects already-logged-in users to `admin.php`. `login.php` compares the username and plain-text password with an SQL query and stores `$_SESSION['username']`. `check.php` is the guard. All three are discussed in detail in [Sessions & login systems](/wiki/sessions-login).
+
+### The dashboard
+
+`admin.php` is a single page with three views (Home, Users, Contact) switched by JavaScript. The Users and Contact views are **iframes** that load other PHP pages inside the dashboard:
+
+<Source file="Learning/SMW_AdminModule/admin.php" from={211} to={219} lang="html" />
+
+<Source file="Learning/SMW_AdminModule/admin.php" from={241} to={257} lang="javascript" />
+
+Iframes are a quick way to reuse whole pages, at the cost of separate scrolling areas and each page loading its own CSS. The fitness admin instead uses one PHP page with `?t=` tabs.
+
+### CRUD, using Students as the example
+
+| Action | File | How |
+| --- | --- | --- |
+| **List + search** | `Students/adminn.php` | Search form → `SELECT … JOIN Faculties … WHERE SName LIKE '%term%'` → table with Edit/Delete links |
+| **Create** | form in `adminn.php` → `addStudent.php` | Validates required fields, reads the uploaded image, `INSERT`, JS redirect |
+| **Update** | `update_student.php?ID_Student=17` | GET shows the form pre-filled from `SELECT`; POST runs `UPDATE` and redirects |
+| **Delete** | `delete_student.php?ID_Student=17` | `DELETE … WHERE ID_Student=17`, redirect back |
+
+The faculty dropdown in the add form is filled from the database, so new faculties appear automatically:
+
+<Source file="Learning/SMW_AdminModule/Students/adminn.php" from={212} to={223} />
+
+The update page is a good example of the **two-phase edit form** that every CRUD app has. Phase 1 (GET): load the row and put the values into the inputs. Phase 2 (POST): save the changes.
+
+<Source file="Learning/SMW_AdminModule/Students/update_student.php" from={50} to={66} />
+
+## What SMW does well
+
+- **Clear separation** of public and admin modules.
+- **Consistent CRUD pattern** in every folder: easy to learn, easy to extend.
+- **Relational design** with a foreign key between students and faculties.
+- **Output escaping** with `htmlspecialchars` on the public page.
+- **Responsive, modern CSS** using CSS variables, flexbox, grid and media queries, plus a dark mode.
+- **Search** with `LIKE`, a feature users expect.
+
+## What to improve (and what the fitness site does instead)
+
+| SMW | Risk | Fitness site |
+| --- | --- | --- |
+| SQL built from input (`'$SName'`, `$ID_Student`) | SQL injection | PDO prepared statements everywhere |
+| Plain-text passwords | Leaked database = leaked passwords | `password_hash` / `password_verify` |
+| Some admin pages without `check.php` (dashboard, Faculties, Users, `update_student.php`) | Anyone can open them | `require_admin()` on line 2 of `admin.php` |
+| `header()` redirects without `exit` | Protected code keeps running | `go()` helper always exits |
+| Delete via GET links | CSRF: a link or image can delete data | Small POST forms + SameSite cookie |
+| Search results printed without escaping | Stored XSS in the admin | `h()` on every value |
+| `config.php` copied into five folders | Change in five places | One `config.php` with all helpers |
+| Full HTML/CSS repeated in every page | Hard to change the design | `page_head()` / `page_foot()` + one `style.css` |
+| Images as BLOBs + data URIs | Heavy pages and queries | (Fitness uses CDN photos; for uploads: files on disk) |
+| JS redirect after 5 seconds | Reload can insert twice | Post/Redirect/Get with an immediate 302 |
+| One factor login | Password theft = account theft | Google Authenticator 2FA + lockout |
+
+None of this makes SMW "bad": it is intentionally simple so each concept is visible on its own. Production code adds the layers in the right column, and knowing **why** each one exists is exactly what the course wants you to learn.
+
+<Exercise title="Add a phone number to students">
+Walk through every place you need to change to add a `Phone` field to students: database, add form, insert, edit form, update, list. Write the SQL and list the files.
+
+<Solution>
+1. **Database**: `ALTER TABLE students ADD Phone VARCHAR(30) NOT NULL DEFAULT '';`
+2. **`Students/adminn.php`**: add `<input type="tel" name="Phone">` to the add form; add a `<th>Phone</th>` and `<td>` to the results table (escaped).
+3. **`Students/addStudent.php`**: read `$_POST['Phone']`, add it to the `INSERT` column list and values (ideally as a prepared statement).
+4. **`Students/update_student.php`**: read it in the GET phase (`$Phone = $res['Phone'];`), add the input with `value="<?= htmlspecialchars($Phone) ?>"`, add it to the `UPDATE … SET`.
+5. **`SMW_UserModule/index.php`**: only if the phone should be public (probably not: privacy!).
+
+Listing the touch points *before* coding is a habit worth building. A field is never "just one column"; it travels through the database, the forms, the processing and the display.
+</Solution>
+</Exercise>

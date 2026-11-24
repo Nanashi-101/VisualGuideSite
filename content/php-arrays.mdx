@@ -1,0 +1,193 @@
+<Goals>
+- Indexed arrays (lists) and associative arrays (records with named keys)
+- Nested arrays: why a database result is "an array of arrays"
+- Reading, adding, changing and removing items
+- Checking for keys safely with `isset`, `array_key_exists` and `??`
+- The array functions you will actually use: `count`, `in_array`, `implode`, `explode`, `array_map`, `array_filter`, `array_column`, sorting
+- Superglobals are arrays too
+</Goals>
+
+## Why arrays
+
+A variable holds one value. An **array** holds many values under one name. Lists of students, the fields of a database row, the data of a form, the plans on the home page: all arrays. If you understand arrays, `$_POST`, `$_SESSION` and database results suddenly look simple.
+
+## Indexed arrays: lists
+
+Items are numbered automatically, **starting at 0**.
+
+```php
+$plans = ['Basic', 'Premium', 'Student'];   // short syntax
+$plans = array('Basic', 'Premium', 'Student'); // old syntax, same result (used in the course files)
+
+echo $plans[0];        // Basic
+echo $plans[2];        // Student
+echo count($plans);    // 3  – but the last index is 2!
+
+$plans[] = 'Day Pass'; // append at the end: index 3
+$plans[1] = 'Premium+';// change an item
+```
+
+```text
+index:   0         1          2          3
+       ┌───────┬──────────┬──────────┬───────────┐
+$plans │ Basic │ Premium+ │ Student  │ Day Pass  │
+       └───────┴──────────┴──────────┴───────────┘
+```
+
+## Associative arrays: records
+
+Instead of numbers you choose **names** (keys). This is how you describe one *thing* with several properties.
+
+```php
+$member = [
+    'first_name' => 'Anna',
+    'last_name'  => 'Schmidt',
+    'plan'       => 'Premium',
+    'price'      => 39.90,
+];
+
+echo $member['first_name'];            // Anna
+$member['email'] = 'anna@example.de';  // add a new key
+unset($member['price']);               // remove a key
+```
+
+A database row is exactly this. When PHP fetches a row from the `users` table it gives you `['id' => 8, 'email' => 'ishika@...', 'role' => 'admin', ...]`, one key per column.
+
+<Mochi>
+An indexed array is a numbered queue: "the person in position 2". An associative array is a form with labelled boxes: "the box labelled email". Same container, different way of finding things.
+</Mochi>
+
+## Nested arrays
+
+Values can themselves be arrays. A list of records is an **array of associative arrays**, which is the shape of almost every database result:
+
+```php
+$members = [
+    ['id' => 1, 'name' => 'Anna', 'plan' => 'Premium'],
+    ['id' => 2, 'name' => 'Ben',  'plan' => 'Basic'],
+];
+
+echo $members[1]['name'];   // Ben: row 1, column "name"
+
+foreach ($members as $m) {
+    echo $m['name'] . ' – ' . $m['plan'] . '<br>';
+}
+```
+
+The fitness home page keeps its program cards in a nested array and unpacks each row straight into variables with `[$img, $title, $text]`:
+
+<Source file="Project/fitness_center/index.php" from={18} to={23} />
+
+```php
+foreach ($programs as $k => [$img, $title, $text]) { ... }
+```
+
+That `[$a, $b, $c] = $row` syntax is called **destructuring**: it copies item 0 into `$img`, item 1 into `$title` and item 2 into `$text`.
+
+## Reading safely
+
+Reading a key that does not exist triggers a warning: *Undefined array key "email"*. With form data that happens all the time, because a field might not have been sent. Three ways to guard:
+
+```php
+if (isset($_POST['email'])) { ... }          // exists and is not null
+if (array_key_exists('email', $_POST)) { ... } // exists, even if null
+$email = $_POST['email'] ?? '';               // value or a default, in one step
+```
+
+`isset` and `??` are what you will use 99% of the time. `empty($x)` is a related check that is true for missing **and** falsy values (`''`, `'0'`, `0`, `[]`), which the professor's code uses to detect blank fields.
+
+## Array functions you will actually use
+
+| Function | Does | Example |
+| --- | --- | --- |
+| `count($a)` | Number of items | `count($plans)` → 3 |
+| `in_array($v, $a, true)` | Is the value in the list? (strict) | `in_array('Gold', $plans, true)` → false |
+| `array_key_exists($k, $a)` / `isset` | Does the key exist? | `isset($tabs[$t])` |
+| `implode($glue, $a)` | List → string | `implode(', ', $plans)` → "Basic, Premium, Student" |
+| `explode($sep, $s)` | String → list | `explode(',', 'a,b')` → `['a','b']` |
+| `array_keys` / `array_values` | Only keys / only values | `array_keys($member)` |
+| `array_column($rows, 'name')` | One column from a list of rows | all names |
+| `array_map(fn, $a)` | Transform every item | `array_map('trim', $parts)` |
+| `array_filter($a, fn)` | Keep items that pass a test | only Premium members |
+| `array_merge($a, $b)` | Join arrays | add defaults |
+| `sort` / `rsort` / `usort` | Sort values (changes the array) | `usort($rows, fn($a, $b) => $a['price'] <=> $b['price'])` |
+| `ksort` / `asort` | Sort associative arrays by key / value | |
+
+### Arrow functions with array_map and array_filter
+
+`fn($x) => ...` is a short function. It is the natural partner of `array_map` and `array_filter`:
+
+```php
+$prices = [24.9, 39.9, 19.9];
+$withVat  = array_map(fn($p) => round($p * 1.19, 2), $prices);
+$cheap    = array_filter($prices, fn($p) => $p < 25);
+$names    = array_column($members, 'name');      // ['Anna', 'Ben']
+```
+
+The fitness admin page uses an arrow function to count rows in any table:
+
+```php
+$count = fn($tbl) => (int)$pdo->query("SELECT COUNT(*) FROM $tbl")->fetchColumn();
+```
+
+## Using an array as a lookup table
+
+A very useful trick: use an associative array to **validate input** against allowed values. The admin panel's tabs are defined once:
+
+<Source file="Project/fitness_center/admin.php" from={6} to={7} />
+
+`isset($tabs[$_GET['t'] ?? ''])` asks "is the requested tab one of the four we know?". If somebody types `?t=hack`, the key does not exist and the page falls back to `users`. One array both **describes** the tabs (label and icon) and **guards** the input. This "allow-list" pattern is one of the most important security habits: never trust input; compare it against a list of known-good values.
+
+## Superglobals are arrays
+
+PHP fills several arrays for you on every request. They are called **superglobals** because you can use them anywhere:
+
+| Array | Contains |
+| --- | --- |
+| `$_GET` | Query string values: `?t=users` → `$_GET['t']` |
+| `$_POST` | Form fields sent with `method="post"` |
+| `$_FILES` | Uploaded files |
+| `$_SESSION` | Data you stored for this visitor (after `session_start()`) |
+| `$_COOKIE` | Cookies the browser sent |
+| `$_SERVER` | Request info: `REQUEST_METHOD`, `HTTP_HOST`, `REMOTE_ADDR`, … |
+
+Print one to see what is inside: `echo '<pre>'; print_r($_SERVER); echo '</pre>';`
+
+## Debugging arrays
+
+```php
+echo '<pre>'; print_r($member); echo '</pre>';   // readable structure
+var_dump($member);                               // with types and lengths
+echo json_encode($member, JSON_PRETTY_PRINT);    // as JSON
+```
+
+The `<pre>` tag keeps the line breaks and indentation so nested arrays stay readable.
+
+<Exercise title="Plan statistics">
+Using this array, print: the number of members, the names of all Premium members as a comma-separated list, the average monthly price, and the members sorted by price from cheapest to most expensive.
+```php
+$members = [
+  ['name' => 'Anna', 'plan' => 'Premium', 'price' => 39.90],
+  ['name' => 'Ben',  'plan' => 'Basic',   'price' => 24.90],
+  ['name' => 'Cleo', 'plan' => 'Premium', 'price' => 39.90],
+  ['name' => 'Dev',  'plan' => 'Student', 'price' => 19.90],
+];
+```
+
+<Solution>
+```php
+<?php
+echo 'Members: ' . count($members) . '<br>';
+
+$premium = array_filter($members, fn($m) => $m['plan'] === 'Premium');
+echo 'Premium: ' . implode(', ', array_column($premium, 'name')) . '<br>';
+
+$avg = array_sum(array_column($members, 'price')) / count($members);
+echo 'Average price: ' . number_format($avg, 2, ',', '.') . ' €<br>';
+
+usort($members, fn($a, $b) => $a['price'] <=> $b['price']);
+foreach ($members as $m) echo $m['name'] . ' (' . $m['price'] . ')<br>';
+```
+`array_column` turns rows into a simple list, which `implode` and `array_sum` can then use. `usort` with the spaceship operator `<=>` sorts by any field you like.
+</Solution>
+</Exercise>

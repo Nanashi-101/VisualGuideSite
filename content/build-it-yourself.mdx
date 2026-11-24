@@ -1,0 +1,541 @@
+<Goals>
+- Rebuild the core of the Kraftwerk site yourself, from an empty folder
+- Work in small milestones that each end with something you can test
+- Practise every concept from this wiki in one real project
+- Learn the order professionals build features in: data → logic → security → looks
+</Goals>
+
+<Mochi>
+Do not copy and paste this article. Type it. When something breaks, that is not a failure; it is the part where you learn. Each milestone ends with a **Checkpoint**: do not move on until it works.
+</Mochi>
+
+Plan about **6–8 hours**, spread over several days. Name your folder `kraft` so you do not overwrite the finished `fitness_center`.
+
+## Milestone 0: plan before you code
+
+Write down, on paper or in a `PLAN.md`:
+
+**Pages**
+
+| Page | Who | Does |
+| --- | --- | --- |
+| `index.php` | everyone | shows plans, contact form |
+| `register.php` | everyone | creates an account |
+| `login.php` | everyone | password step |
+| `setup_2fa.php` / `verify_2fa.php` | half-logged-in users | Authenticator step |
+| `dashboard.php` | logged-in users | landing page |
+| `admin.php` | admins | users list, plans CRUD, messages |
+| `logout.php` | logged-in users | code, then log out |
+
+**Tables:** `users`, `user_2fa`, `plans`, `contacts` (we skip `members` here; adding it is your final challenge).
+
+**Shared code:** connection, session, `h()`, guards → `config.php`.
+
+## Milestone 1: folder and database
+
+Create `C:\xampp\htdocs\kraft\install.sql`:
+
+```sql:install.sql
+CREATE DATABASE IF NOT EXISTS kraft CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+USE kraft;
+
+CREATE TABLE IF NOT EXISTS users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(150) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  role ENUM('member','admin') NOT NULL DEFAULT 'member',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS plans (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(50) NOT NULL,
+  price_eur DECIMAL(6,2) NOT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO plans (name, price_eur) VALUES ('Basic', 24.90), ('Premium', 39.90), ('Student', 19.90);
+```
+
+Import it in phpMyAdmin (**Import** tab) or with:
+
+```powershell
+C:\xampp\mysql\bin\mysql.exe -u root < C:\xampp\htdocs\kraft\install.sql
+```
+
+**Checkpoint:** phpMyAdmin shows the database `kraft` with two tables, and `plans` has three rows.
+
+## Milestone 2: config.php
+
+```php:config.php
+<?php
+// Shared by every page.
+$pdo = new PDO('mysql:host=127.0.0.1;dbname=kraft;charset=utf8mb4', 'root', '', [
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    PDO::ATTR_EMULATE_PREPARES => false,
+]);
+session_set_cookie_params(['httponly' => true, 'samesite' => 'Strict']);
+session_start();
+
+function h($s) { return htmlspecialchars((string)$s, ENT_QUOTES); }
+function go($url) { header("Location: $url"); exit; }
+function me() { return $_SESSION['user'] ?? null; }
+function require_login() { if (!me()) go('login.php'); }
+function require_admin() {
+    require_login();
+    if (me()['role'] !== 'admin') { http_response_code(403); exit('Admins only.'); }
+}
+```
+
+No closing `?>`: this file only contains PHP, and a stray space after `?>` would break redirects.
+
+**Checkpoint:** create `test.php` with `<?php require 'config.php'; echo 'OK';` and open `http://localhost/kraft/test.php`. You see **OK**. If you see a PDO error, check that MySQL is running and the database name matches. Then delete `test.php`.
+
+## Milestone 3: the home page lists plans
+
+```php:index.php
+<?php
+require 'config.php';
+$plans = $pdo->query('SELECT name, price_eur FROM plans ORDER BY price_eur')->fetchAll();
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Kraft</title></head>
+<body>
+  <nav><a href="index.php">Home</a> | <a href="register.php">Join</a> | <a href="login.php">Login</a></nav>
+  <h1>Kraft Fitness</h1>
+  <h2>Memberships</h2>
+  <ul>
+    <?php foreach ($plans as $p): ?>
+      <li><?= h($p['name']) ?>: <?= number_format($p['price_eur'], 2, ',', '.') ?> € / month</li>
+    <?php endforeach; ?>
+  </ul>
+</body>
+</html>
+```
+
+**Checkpoint:** the three plans appear, cheapest first, with German number formatting. Change a price in phpMyAdmin and reload: the page updates. That is the moment the site becomes *dynamic*.
+
+## Milestone 4: registration
+
+```php:register.php
+<?php
+require 'config.php';
+$msg = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $email = trim($_POST['email'] ?? '');
+    $pass  = $_POST['password'] ?? '';
+
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $msg = 'Invalid email.';
+    elseif (strlen($pass) < 8)                      $msg = 'Password needs at least 8 characters.';
+    else {
+        // The first account becomes the admin.
+        $role = $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn() == 0 ? 'admin' : 'member';
+        try {
+            $pdo->prepare('INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)')
+                ->execute([$email, password_hash($pass, PASSWORD_DEFAULT), $role]);
+            go('login.php?registered=1');
+        } catch (PDOException $e) {
+            $msg = $e->getCode() == 23000 ? 'This email is already registered.' : 'Registration failed.';
+        }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Join</title></head>
+<body>
+  <h1>Join Kraft</h1>
+  <?php if ($msg): ?><p style="color:#c00"><?= h($msg) ?></p><?php endif; ?>
+  <form method="post">
+    <label>Email <input type="email" name="email" value="<?= h($_POST['email'] ?? '') ?>" required></label><br>
+    <label>Password <input type="password" name="password" minlength="8" required></label><br>
+    <button>Create account</button>
+  </form>
+</body></html>
+```
+
+**Checkpoint:**
+1. Register `you@test.de`. You land on `login.php` (it does not exist yet, so a 404 is expected).
+2. In phpMyAdmin, `users` has your row with `role = admin` and a `password_hash` starting with `$2y$`.
+3. Register the same email again: "This email is already registered."
+4. Register `friend@test.de`: role `member`.
+
+## Milestone 5: login, dashboard, logout (password only)
+
+First a working login **without** 2FA. We add the second factor in Milestone 8, and the structure is designed so that is a small change.
+
+```php:login.php
+<?php
+require 'config.php';
+$msg = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $s = $pdo->prepare('SELECT id, email, role, password_hash FROM users WHERE email = ?');
+    $s->execute([trim($_POST['email'] ?? '')]);
+    $u = $s->fetch();
+    if ($u && password_verify($_POST['password'] ?? '', $u['password_hash'])) {
+        session_regenerate_id(true);
+        $_SESSION['user'] = ['id' => $u['id'], 'email' => $u['email'], 'role' => $u['role']];
+        go('dashboard.php');
+    }
+    $msg = 'Wrong email or password.';
+}
+?>
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Login</title></head>
+<body>
+  <h1>Login</h1>
+  <?php if (isset($_GET['registered'])): ?><p style="color:green">Account created. Please log in.</p><?php endif; ?>
+  <?php if ($msg): ?><p style="color:#c00"><?= h($msg) ?></p><?php endif; ?>
+  <form method="post">
+    <label>Email <input type="email" name="email" required></label><br>
+    <label>Password <input type="password" name="password" required></label><br>
+    <button>Login</button>
+  </form>
+</body></html>
+```
+
+```php:dashboard.php
+<?php
+require 'config.php';
+require_login();
+?>
+<h1>Hello, <?= h(me()['email']) ?></h1>
+<p>Your role: <?= h(me()['role']) ?></p>
+<?php if (me()['role'] === 'admin'): ?><p><a href="admin.php">Admin panel</a></p><?php endif; ?>
+<form method="post" action="logout.php"><button>Log out</button></form>
+```
+
+```php:logout.php
+<?php
+require 'config.php';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $_SESSION = [];
+    session_destroy();
+    setcookie(session_name(), '', time() - 3600, '/');
+}
+go('login.php');
+```
+
+**Checkpoint:**
+1. Wrong password → error. Right password → dashboard with your email.
+2. Copy the dashboard URL, log out, paste it: you are sent to `login.php`. The guard works.
+3. In DevTools → Application → Cookies, watch `PHPSESSID` change value after logging in (that is `session_regenerate_id`).
+
+## Milestone 6: the admin panel, users tab
+
+```php:admin.php
+<?php
+require 'config.php';
+require_admin();
+
+$tabs = ['users' => 'Users', 'plans' => 'Plans'];
+$t = isset($tabs[$_GET['t'] ?? '']) ? $_GET['t'] : 'users';
+?>
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Admin</title></head>
+<body>
+  <h1>Admin</h1>
+  <nav>
+    <?php foreach ($tabs as $key => $label): ?>
+      <a href="?t=<?= $key ?>"<?= $key === $t ? ' style="font-weight:bold"' : '' ?>><?= $label ?></a>
+    <?php endforeach; ?>
+    | <a href="dashboard.php">Back</a>
+  </nav>
+
+<?php if ($t === 'users'):
+    $rows = $pdo->query('SELECT id, email, role, created_at FROM users ORDER BY id')->fetchAll(); ?>
+  <table border="1" cellpadding="6">
+    <tr><th>ID</th><th>Email</th><th>Role</th><th>Registered</th></tr>
+    <?php foreach ($rows as $r): ?>
+      <tr><td><?= $r['id'] ?></td><td><?= h($r['email']) ?></td><td><?= h($r['role']) ?></td><td><?= h($r['created_at']) ?></td></tr>
+    <?php endforeach; ?>
+  </table>
+<?php endif; ?>
+</body></html>
+```
+
+**Checkpoint:** as the admin you see both accounts. Log in as `friend@test.de` and open `admin.php`: **Admins only.** Try `admin.php?t=hack`: the users tab shows (the allow-list worked).
+
+## Milestone 7: CRUD for plans
+
+Add action handling at the top of `admin.php`, right after the `$t` line:
+
+```php
+$err = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id = (int)($_POST['id'] ?? 0);
+    switch ($_POST['do'] ?? '') {
+        case 'add_plan':
+            $name = trim($_POST['name'] ?? '');
+            $price = $_POST['price'] ?? '';
+            if ($name === '' || !is_numeric($price)) { $err = 'Name and numeric price required.'; break; }
+            $pdo->prepare('INSERT INTO plans (name, price_eur) VALUES (?, ?)')->execute([$name, $price]);
+            break;
+        case 'delete_plan':
+            $pdo->prepare('DELETE FROM plans WHERE id = ?')->execute([$id]);
+            break;
+    }
+    if (!$err) go("admin.php?t=$t");
+}
+```
+
+And the plans tab, before the final `</body>`:
+
+```php
+<?php if ($t === 'plans'):
+    $rows = $pdo->query('SELECT * FROM plans ORDER BY price_eur')->fetchAll(); ?>
+  <?php if ($err): ?><p style="color:#c00"><?= h($err) ?></p><?php endif; ?>
+  <form method="post">
+    <input type="hidden" name="do" value="add_plan">
+    <input name="name" placeholder="Name" required>
+    <input name="price" type="number" step="0.01" min="0" placeholder="Price" required>
+    <button>Add</button>
+  </form>
+  <table border="1" cellpadding="6">
+    <?php foreach ($rows as $r): ?>
+      <tr>
+        <td><?= h($r['name']) ?></td>
+        <td><?= number_format($r['price_eur'], 2, ',', '.') ?> €</td>
+        <td>
+          <form method="post" onsubmit="return confirm('Delete?')">
+            <input type="hidden" name="do" value="delete_plan">
+            <input type="hidden" name="id" value="<?= $r['id'] ?>">
+            <button>Delete</button>
+          </form>
+        </td>
+      </tr>
+    <?php endforeach; ?>
+  </table>
+<?php endif; ?>
+```
+
+**Checkpoint:** add "Day Pass 9.50", see it on the admin **and** on the home page, delete it. Reload after adding: no duplicate (thanks to the redirect). Look at the Network tab: the POST answers **302**, then a GET follows.
+
+## Milestone 8: Google Authenticator
+
+Now the second factor. Copy `totp.php` from the course files (`Week3_Login/GoogleAuth/totp.php`) and `qr_fcm.js` (from `FCM_GoogleAuth` or the finished `fitness_center`) into `kraft/`.
+
+### 8a. Table and config
+
+```sql
+USE kraft;
+CREATE TABLE user_2fa (
+  user_id INT PRIMARY KEY,
+  secret_base32 VARCHAR(64) NOT NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 0,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+```
+
+Add to `config.php`:
+
+```php
+require_once __DIR__ . '/totp.php';
+const ISSUER = 'Kraft Fitness';
+
+function finish_login($u) {
+    session_regenerate_id(true);
+    $_SESSION = ['user' => ['id' => $u['id'], 'email' => $u['email'], 'role' => $u['role']]];
+    go('dashboard.php');
+}
+
+function code_ok($uid, $code, $enabledOnly = true) {
+    global $pdo;
+    $s = $pdo->prepare('SELECT secret_base32 FROM user_2fa WHERE user_id = ?' . ($enabledOnly ? ' AND enabled = 1' : ''));
+    $s->execute([$uid]);
+    $secret = $s->fetchColumn();
+    return $secret && verify_totp($secret, $code);
+}
+```
+
+### 8b. Change the login: password → "pre" state
+
+In `login.php`, replace the two lines that set `$_SESSION['user']` and go to the dashboard with:
+
+```php
+        $_SESSION = ['pre' => ['id' => $u['id'], 'email' => $u['email'], 'role' => $u['role']]];
+        $s = $pdo->prepare('SELECT enabled FROM user_2fa WHERE user_id = ?');
+        $s->execute([$u['id']]);
+        go($s->fetchColumn() ? 'verify_2fa.php' : 'setup_2fa.php');
+```
+
+### 8c. Setup page
+
+```php:setup_2fa.php
+<?php
+require 'config.php';
+$pre = $_SESSION['pre'] ?? null;
+if (!$pre) go('login.php');
+
+$s = $pdo->prepare('SELECT secret_base32, enabled FROM user_2fa WHERE user_id = ?');
+$s->execute([$pre['id']]);
+$row = $s->fetch();
+if ($row && $row['enabled']) go('verify_2fa.php');
+if (!$row) {
+    $row = ['secret_base32' => random_secret_base32()];
+    $pdo->prepare('INSERT INTO user_2fa (user_id, secret_base32) VALUES (?, ?)')->execute([$pre['id'], $row['secret_base32']]);
+}
+
+$msg = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (code_ok($pre['id'], $_POST['code'] ?? '', false)) {
+        $pdo->prepare('UPDATE user_2fa SET enabled = 1 WHERE user_id = ?')->execute([$pre['id']]);
+        finish_login($pre);
+    }
+    $msg = 'Wrong code. Try the current one.';
+}
+$uri = provisioning_uri($pre['email'], ISSUER, $row['secret_base32']);
+?>
+<h1>Set up Google Authenticator</h1>
+<div id="qr"></div>
+<p>Or type this key: <code><?= h($row['secret_base32']) ?></code></p>
+<?php if ($msg): ?><p style="color:#c00"><?= h($msg) ?></p><?php endif; ?>
+<form method="post">
+  <input name="code" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code" required>
+  <button>Confirm</button>
+</form>
+<script src="qr_fcm.js"></script>
+<script>renderFCMQRCode(document.getElementById('qr'), <?= json_encode($uri) ?>);</script>
+```
+
+### 8d. Verify page
+
+```php:verify_2fa.php
+<?php
+require 'config.php';
+$pre = $_SESSION['pre'] ?? null;
+if (!$pre) go('login.php');
+$msg = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (code_ok($pre['id'], $_POST['code'] ?? '')) finish_login($pre);
+    $msg = 'Wrong code.';
+}
+?>
+<h1>Authenticator code</h1>
+<?php if ($msg): ?><p style="color:#c00"><?= h($msg) ?></p><?php endif; ?>
+<form method="post">
+  <input name="code" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code" required autofocus>
+  <button>Verify</button>
+</form>
+```
+
+**Checkpoint:**
+1. Log out and log in: you see a QR code. Scan it with Google Authenticator. Enter a wrong code: error. Enter the right one: dashboard.
+2. Log out, log in again: no QR code this time, just the code field.
+3. After the password step, try opening `dashboard.php` directly: you are sent to login. The `pre` state is not enough.
+
+## Milestone 9: logout needs a code
+
+Replace `logout.php` and change the dashboard's logout form into a link to `logout.php`:
+
+```php:logout.php
+<?php
+require 'config.php';
+require_login();
+$msg = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (code_ok(me()['id'], $_POST['code'] ?? '')) {
+        $_SESSION = [];
+        session_destroy();
+        setcookie(session_name(), '', time() - 3600, '/');
+        go('login.php');
+    }
+    $msg = 'Wrong code. You are still logged in.';
+}
+?>
+<h1>Confirm logout</h1>
+<?php if ($msg): ?><p style="color:#c00"><?= h($msg) ?></p><?php endif; ?>
+<form method="post"><input name="code" inputmode="numeric" maxlength="6" required autofocus><button>Log out</button></form>
+<p><a href="dashboard.php">Stay logged in</a></p>
+```
+
+**Checkpoint:** wrong code keeps you logged in; right code logs you out.
+
+## Milestone 10: lockout
+
+Add the columns:
+
+```sql
+ALTER TABLE users ADD failed_count TINYINT NOT NULL DEFAULT 0, ADD locked_until DATETIME DEFAULT NULL;
+```
+
+Add to `config.php`, then use it in `code_ok` (count failures, reset on success) and in `login.php` (refuse while locked, count wrong passwords). Compare with the finished version in the [walkthrough](/wiki/fitness-walkthrough#5-lockout).
+
+```php
+const MAX_FAILS = 5, LOCK_MINUTES = 15;
+
+function is_locked($uid) {
+    global $pdo;
+    $s = $pdo->prepare('SELECT locked_until > NOW() FROM users WHERE id = ?');
+    $s->execute([$uid]);
+    return (bool)$s->fetchColumn();
+}
+
+function register_fail($uid) {
+    global $pdo;
+    $pdo->prepare('UPDATE users SET failed_count = failed_count + 1,
+        locked_until = IF(failed_count >= ?, NOW() + INTERVAL ' . LOCK_MINUTES . ' MINUTE, locked_until),
+        failed_count = IF(failed_count >= ?, 0, failed_count) WHERE id = ?')
+        ->execute([MAX_FAILS, MAX_FAILS, $uid]);
+}
+```
+
+**Checkpoint:** five wrong passwords in a row, then the right one: still refused. In phpMyAdmin set `locked_until = NULL`: login works again.
+
+## Milestone 11: contact form and messages
+
+1. `CREATE TABLE contacts` (id, subject, message, email, created_at).
+2. Add the form to `index.php` with POST handling at the top: validate, insert with a prepared statement, show "Thank you".
+3. Add a `contacts` tab to `$tabs` in `admin.php` with a table and a `delete_contact` action.
+
+Try it without looking first. The finished `index.php` and `admin.php` show one solution.
+
+**Checkpoint:** send a message containing `<b>hi</b>`; in the admin it shows the tags as text, not bold. Escaping works.
+
+## Milestone 12: make it look good
+
+Only now, with everything working, add design:
+
+1. Move the repeated `<!DOCTYPE>…<nav>` and footer into `page_head($title)` / `page_foot()` functions in `config.php`.
+2. Link Bootstrap from the CDN in `page_head`, and use `container`, `row`, `col-md-4`, `card`, `btn btn-primary`, `form-control`, `table table-hover`.
+3. Add your own `style.css` for colours and spacing.
+
+See [Kraftwerk: frontend & design](/wiki/fitness-frontend) for the techniques.
+
+**Checkpoint:** every page looks consistent, and changing one colour in `style.css` changes it everywhere.
+
+## Milestone 13: test like a reviewer
+
+Go through the [security checklist](/wiki/web-security#the-pre-submission-checklist), then this test list. Write down the result of each.
+
+| Test | Expected |
+| --- | --- |
+| Register with an invalid email (remove `type="email"` in DevTools first) | Server-side error message |
+| Register twice with the same email | Friendly duplicate message |
+| Log in with `' OR '1'='1` as email and anything as password | "Wrong email or password." |
+| Open `admin.php` logged out / as member | Login page / "Admins only." |
+| Open `dashboard.php` after the password but before the code | Login page |
+| Wrong 2FA code at login and logout | Error, no state change |
+| Five wrong attempts | Lock message |
+| Save a plan named `<script>alert(1)</script>` | Displayed as text, no popup |
+| Reload after adding a plan | No duplicate |
+| Phone width (DevTools device toolbar) | No sideways scrolling |
+
+## Final challenge: members
+
+Add the `members` table (first name, last name, birthdate, address, notes, `plan_id` foreign key) and a members tab with add, **edit** and delete. Hints:
+
+- One form for add and edit: a hidden `id` that is `0` for new members.
+- `?t=members&edit=5` loads that member into the form.
+- `JOIN plans` to show the plan name in the table.
+- Try deleting a plan that a member uses: catch the foreign key error.
+
+When this works, compare with the finished `admin.php`. If your version works and is readable, it is correct, even if it looks different. That is the goal of the whole course: you can now build this yourself.
+
+<Exercise title="Reflection">
+After finishing, write five sentences in your notes: which milestone was hardest, which bug took longest to find, how you found it, and what you would build next.
+
+<Solution>
+There is no model answer. Writing it down helps you notice your own debugging process, which is the skill that transfers to every future project. Typical answers: Milestone 8 is hardest (many moving parts and invisible session state); the longest bug is usually a typo in a `name` attribute, a missing `exit`, or a session that was not started; and the most useful tool is `var_dump($_SESSION)` and the browser's Network tab.
+</Solution>
+</Exercise>

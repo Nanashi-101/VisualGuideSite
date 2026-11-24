@@ -1,0 +1,225 @@
+<Goals>
+- How an HTML document is structured and why each part is there
+- Elements, tags, attributes and nesting
+- The tags you will use in every project: headings, text, links, images, lists, tables, divs
+- Semantic HTML: `header`, `nav`, `main`, `section`, `footer`
+- How CSS and JavaScript attach to a page
+</Goals>
+
+## What HTML is
+
+**HTML** (HyperText Markup Language) describes the *structure* of a page: this is a heading, this is a paragraph, this is a link. It does not decide colours or layout (that is CSS) and it does not react to clicks (that is JavaScript).
+
+PHP's main job in this course is to **produce HTML**. If you can read and write HTML comfortably, you can see exactly what your PHP is supposed to output, which makes PHP far easier.
+
+## The skeleton of every page
+
+```html:skeleton.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kraftwerk Fitness</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Welcome</h1>
+  <p>The visible content goes here.</p>
+  <script src="site.js"></script>
+</body>
+</html>
+```
+
+| Line | Why it is there |
+| --- | --- |
+| `<!DOCTYPE html>` | Tells the browser to use modern HTML5 rules. Without it, browsers fall back to an old "quirks" mode. |
+| `<html lang="en">` | The root element. `lang` helps screen readers and translation tools. |
+| `<head>` | Information *about* the page. Nothing here is shown in the page itself. |
+| `<meta charset="UTF-8">` | The text encoding. Needed for ä, ö, ü, ß, € and emoji to display correctly. |
+| `<meta name="viewport" ...>` | Makes the page fit phone screens instead of showing a tiny desktop page. |
+| `<title>` | The text in the browser tab and in bookmarks. |
+| `<link rel="stylesheet">` | Loads a CSS file. |
+| `<body>` | Everything visible. |
+| `<script src>` | Loads JavaScript. At the end of `body` so the HTML is already there when the script runs. |
+
+## Elements, tags and attributes
+
+```text
+   opening tag          content          closing tag
+ ┌──────┴───────┐ ┌─────────┴─────────┐ ┌──┴──┐
+ <a href="plans.php" class="btn">See our plans</a>
+    └─┬─┘└────┬────┘ └───┬───┘
+  attribute name  value  another attribute
+```
+
+- An **element** is the whole thing: opening tag, content, closing tag.
+- **Attributes** add settings inside the opening tag, always as `name="value"`.
+- Some elements are **empty** (void) and have no closing tag: `<img>`, `<input>`, `<br>`, `<meta>`, `<link>`.
+
+Elements **nest** inside each other like boxes, and they must close in the reverse order they opened:
+
+```html
+<p>This is <strong>very <em>important</em></strong>.</p>   <!-- correct -->
+<p>This is <strong>very <em>important</strong></em>.</p>   <!-- wrong: crossed -->
+```
+
+### Attributes you will use constantly
+
+| Attribute | Purpose | Example |
+| --- | --- | --- |
+| `id` | A unique name for one element on the page | `<section id="contact">`, linked with `href="#contact"` |
+| `class` | A reusable name for styling, can repeat | `<div class="card">` |
+| `href` | Where a link goes | `<a href="login.php">` |
+| `src` | The file to load | `<img src="foto/male.jpg">` |
+| `alt` | Text that describes an image | `alt="Student photo"` |
+| `name` | The key a form field is sent under | `<input name="email">` |
+| `style` | Inline CSS (use sparingly) | `style="color:red"` |
+
+## Text and structure
+
+```html
+<h1>Main title (one per page)</h1>
+<h2>Section title</h2>
+<h3>Sub-section</h3>
+
+<p>A paragraph. <strong>Important</strong> and <em>emphasised</em> words.<br>
+A line break inside the same paragraph.</p>
+
+<hr>   <!-- a horizontal divider -->
+```
+
+Headings go from `h1` to `h6` and should form an outline, like chapters in a book. Do not pick a heading level because of its size; size is CSS's job.
+
+## Links and images
+
+```html
+<a href="register.php">Join now</a>                       <!-- same folder -->
+<a href="../admin.php">Back to admin</a>                     <!-- one folder up -->
+<a href="#plans">Jump to plans</a>                           <!-- element with id="plans" -->
+<a href="https://srh-university.de" target="_blank" rel="noopener">SRH</a>  <!-- new tab -->
+
+<img src="Foto/female.jpg" alt="Default profile photo" width="120" height="120">
+```
+
+**Relative paths** start from the current file's folder. `../` means "go up one folder". The professor's admin pages use `../logout.php` because they sit in a sub-folder like `Students/`.
+
+Always give images `alt` text. It is read aloud by screen readers and shown if the image fails to load. Setting `width` and `height` reserves space so the page does not jump while images load.
+
+## Lists
+
+```html
+<ul>                <!-- unordered: bullets -->
+  <li>Gym floor access</li>
+  <li>Locker room</li>
+</ul>
+
+<ol>                <!-- ordered: numbers -->
+  <li>Register</li>
+  <li>Scan the QR code</li>
+  <li>Enter the 6-digit code</li>
+</ol>
+```
+
+Navigation menus are usually `ul` lists of links styled with CSS, which is what Bootstrap's navbar does.
+
+## Tables
+
+Tables show **data in rows and columns**, like database results. That makes them central to every admin panel.
+
+```html
+<table>
+  <thead>
+    <tr><th>Name</th><th>Plan</th><th>Price</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Anna Schmidt</td><td>Premium</td><td>€39.90</td></tr>
+    <tr><td>Max Müller</td><td>Basic</td><td>€24.90</td></tr>
+  </tbody>
+</table>
+```
+
+`tr` is a table row, `th` a header cell, `td` a data cell. When PHP lists database rows, it prints one `<tr>` per row inside a loop. You will write that loop in [PHP + MySQL](/wiki/php-mysql).
+
+## div, span and semantic elements
+
+`div` (a block) and `span` (inline, inside text) are neutral containers with no meaning; they exist to group things for CSS.
+
+HTML5 added **semantic** elements that describe their *role*. They look like a `div` but tell browsers, screen readers and other developers what the part is:
+
+```html
+<header>  logo and title          </header>
+<nav>     the main menu            </nav>
+<main>
+  <section id="students"> one topic </section>
+  <article> a self-contained item   </article>
+  <aside>   side information        </aside>
+</main>
+<footer>  copyright, links         </footer>
+```
+
+The professor's `SMW_UserModule/index.php` is a good example: it uses `header`, `nav`, `section id="Students"`, `section id="Contact"` and `footer`, and its cards are `article` elements.
+
+<Source file="Learning/SMW_UserModule/index.php" from={214} to={246} lang="html" />
+
+## Connecting CSS and JavaScript
+
+CSS can be written in three places. From most to least recommended:
+
+```html
+<link rel="stylesheet" href="style.css">          <!-- 1. external file (reused by every page) -->
+<style> .card { border-radius: 12px; } </style>   <!-- 2. inside the page -->
+<p style="color: orange">Hi</p>                   <!-- 3. inline on one element -->
+```
+
+JavaScript works the same way: `<script src="site.js"></script>` for a file, or code inside `<script> ... </script>`. The professor's pages put CSS in `<style>` and JS in `<script>` inside the PHP file, which is fine for single pages. The fitness site moves them into `style.css` and `site.js` because every page shares them.
+
+<Tip>
+Bootstrap is "just" a big CSS file (plus a JS file) that someone else wrote. You link it like any other stylesheet and then use its class names: `class="btn btn-primary"` gives you a styled button. See [Kraftwerk: frontend & design](/wiki/fitness-frontend).
+</Tip>
+
+## Comments and validation
+
+`<!-- this is an HTML comment -->` is ignored by the browser but **still visible** in *View page source*. Never put passwords or private notes in HTML comments. Use PHP comments instead, which never reach the browser.
+
+Browsers are forgiving and will display broken HTML anyway, which hides mistakes. When a layout looks strange, paste the page source into **validator.w3.org** to find unclosed tags.
+
+<Exercise title="A membership page">
+Write `plans.html` with: a `header` containing an `h1` "Kraftwerk Fitness", a `nav` with three links (Home, Plans, Contact), a `main` with a section `id="plans"` that contains a table of three plans (name, price, what is included as a `ul` inside the cell), and a `footer` with a copyright line. Add a link in the nav that jumps to the plans section.
+
+<Solution>
+```html:plans.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plans – Kraftwerk Fitness</title>
+</head>
+<body>
+  <header><h1>Kraftwerk Fitness</h1></header>
+  <nav>
+    <a href="index.html">Home</a> |
+    <a href="#plans">Plans</a> |
+    <a href="#contact">Contact</a>
+  </nav>
+  <main>
+    <section id="plans">
+      <h2>Memberships</h2>
+      <table>
+        <thead><tr><th>Plan</th><th>Price</th><th>Included</th></tr></thead>
+        <tbody>
+          <tr><td>Student</td><td>€19.90</td><td><ul><li>Gym floor</li><li>Off-peak classes</li></ul></td></tr>
+          <tr><td>Basic</td><td>€24.90</td><td><ul><li>Gym floor</li><li>Locker room</li></ul></td></tr>
+          <tr><td>Premium</td><td>€39.90</td><td><ul><li>Everything in Basic</li><li>All classes</li><li>Sauna</li></ul></td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+  <footer id="contact">&copy; 2026 Kraftwerk Fitness München</footer>
+</body>
+</html>
+```
+`&copy;` is an **HTML entity** that displays ©. Entities also exist for characters that would otherwise be read as HTML, like `&lt;` for `<`.
+</Solution>
+</Exercise>

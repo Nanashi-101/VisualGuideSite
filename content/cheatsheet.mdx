@@ -1,0 +1,218 @@
+A one-page reminder of the syntax used across the course. Each section links to the full article.
+
+## PHP basics
+
+[Full article](/wiki/php-basics)
+
+```php
+<?php
+// comment          # comment          /* block comment */
+$name = 'Anna';                  // variable
+const ISSUER = 'Kraftwerk';      // constant
+echo "Hi $name";                 // double quotes insert variables
+echo 'Hi ' . $name;              // . joins strings
+?>
+<p><?= h($name) ?></p>           <!-- short echo inside HTML -->
+```
+
+| Task | Code |
+| --- | --- |
+| Inspect a value | `var_dump($x);` / `print_r($arr);` |
+| Convert type | `(int) $x`, `(float) $x`, `(string) $x` |
+| String length / trim | `strlen($s)`, `mb_strlen($s)`, `trim($s)` |
+| Replace / contains | `str_replace('a', 'b', $s)`, `str_contains($s, '@')` |
+| Format a price | `number_format(1500.5, 2, ',', '.')` → `1.500,50` |
+| Date | `date('d.m.Y H:i')`, `date('Y')` |
+
+## Decisions
+
+[Full article](/wiki/php-control-flow)
+
+```php
+if ($a === $b) { ... } elseif ($a > 10 && !$flag) { ... } else { ... }
+
+switch ($do) { case 'save': ...; break; default: ...; }
+
+$label = match (true) { $g >= 90 => 'A', $g >= 50 => 'D', default => 'F' };
+
+$badge = $isAdmin ? 'Admin' : 'Member';      // ternary
+$email = $_POST['email'] ?? '';              // default if missing
+```
+
+## Loops
+
+[Full article](/wiki/php-loops)
+
+```php
+for ($i = 1; $i <= 10; $i++) { ... }
+while ($row = mysqli_fetch_assoc($result)) { ... }
+do { ... } while ($x <= 5);
+foreach ($items as $item) { ... }
+foreach ($prices as $plan => $price) { ... }
+// in templates:
+<?php foreach ($rows as $r): ?> ... <?php endforeach; ?>
+```
+
+`break` leaves the loop, `continue` skips to the next round.
+
+## Arrays
+
+[Full article](/wiki/php-arrays)
+
+```php
+$list = ['Basic', 'Premium'];               $list[] = 'Student';
+$row  = ['name' => 'Anna', 'plan' => 2];    $row['email'] = 'a@b.de';
+count($list);  in_array('Basic', $list, true);  isset($row['name']);
+implode(', ', $list);  explode(',', 'a,b');  array_column($rows, 'name');
+array_map(fn($x) => $x * 2, $nums);  array_filter($nums, fn($x) => $x > 2);
+usort($rows, fn($a, $b) => $a['price'] <=> $b['price']);
+[$a, $b] = $pair;                            // destructuring
+```
+
+## Functions and includes
+
+[Full article](/wiki/php-functions)
+
+```php
+function euro(float $n, int $dec = 2): string { return number_format($n, $dec, ',', '.') . ' €'; }
+$double = fn($x) => $x * 2;
+function save() { global $pdo; ... }        // use an outside variable
+
+require 'config.php';         // stop if missing
+require_once __DIR__ . '/totp.php';
+include 'optional.php';       // warn if missing
+```
+
+## Forms
+
+[HTML forms](/wiki/html-forms) · [Handling form data](/wiki/php-forms)
+
+```html
+<form method="post" action="save.php" enctype="multipart/form-data">
+  <label for="e">Email</label> <input id="e" type="email" name="email" required>
+  <select name="plan_id"><option value="1">Basic</option></select>
+  <textarea name="message" maxlength="500"></textarea>
+  <input type="hidden" name="do" value="save">
+  <button type="submit">Save</button>
+</form>
+```
+
+```php
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $email = trim($_POST['email'] ?? '');
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $msg = 'Invalid email.';
+    // ... save ...
+    header('Location: done.php'); exit;     // Post/Redirect/Get
+}
+echo htmlspecialchars($value, ENT_QUOTES);  // escape every output
+```
+
+## Sessions and login
+
+[Sessions](/wiki/sessions-login) · [Hashing & 2FA](/wiki/passwords-2fa)
+
+```php
+session_start();                               // every page, before output
+$_SESSION['user'] = ['id' => 8, 'role' => 'admin'];
+session_regenerate_id(true);                   // after login
+if (!isset($_SESSION['user'])) { header('Location: login.php'); exit; }
+
+$hash = password_hash($pass, PASSWORD_DEFAULT);
+password_verify($typed, $hash);                // true / false
+
+$_SESSION = []; session_destroy();             // logout
+setcookie(session_name(), '', time() - 3600, '/');
+```
+
+## PDO
+
+[Full article](/wiki/php-mysql)
+
+```php
+$pdo = new PDO('mysql:host=127.0.0.1;dbname=kraft;charset=utf8mb4', 'root', '', [
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+]);
+
+$rows  = $pdo->query('SELECT * FROM plans')->fetchAll();
+$count = $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();
+
+$s = $pdo->prepare('SELECT * FROM users WHERE email = ?');
+$s->execute([$email]);
+$user = $s->fetch();                           // or false
+
+$pdo->prepare('INSERT INTO plans (name, price_eur) VALUES (?, ?)')->execute([$name, $price]);
+$id = $pdo->lastInsertId();
+
+try { ... } catch (PDOException $e) { if ($e->getCode() == 23000) { /* duplicate / FK */ } }
+```
+
+## mysqli (procedural, as in SMW)
+
+```php
+$conn = mysqli_connect('localhost', 'root', '', 'smw') or die('Connection failed');
+$result = mysqli_query($conn, 'SELECT * FROM faculties');
+while ($row = mysqli_fetch_assoc($result)) { echo $row['Faculty']; }
+mysqli_num_rows($result);
+
+$stmt = mysqli_prepare($conn, 'INSERT INTO users (username, email) VALUES (?, ?)');
+mysqli_stmt_bind_param($stmt, 'ss', $u, $e);   // s string, i int, d float
+mysqli_stmt_execute($stmt);
+```
+
+## SQL
+
+[Full article](/wiki/databases-sql)
+
+```sql
+CREATE TABLE plans (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(50) NOT NULL,
+  price_eur DECIMAL(6,2) NOT NULL
+) ENGINE=InnoDB;
+
+ALTER TABLE plans ADD description VARCHAR(150) NOT NULL DEFAULT '';
+
+INSERT INTO plans (name, price_eur) VALUES ('Basic', 24.90);
+SELECT name, price_eur FROM plans WHERE price_eur < 30 ORDER BY price_eur DESC LIMIT 10;
+SELECT * FROM members WHERE last_name LIKE '%mid%';
+UPDATE plans SET price_eur = 26.90 WHERE id = 1;
+DELETE FROM contacts WHERE id = 15;
+
+SELECT m.first_name, p.name AS plan
+FROM members m JOIN plans p ON p.id = m.plan_id;          -- LEFT JOIN keeps unmatched left rows
+
+SELECT p.name, COUNT(m.id) FROM plans p LEFT JOIN members m ON m.plan_id = p.id GROUP BY p.id, p.name;
+```
+
+| Type | For |
+| --- | --- |
+| `INT`, `TINYINT` | IDs, counts, flags |
+| `DECIMAL(6,2)` | money |
+| `VARCHAR(n)`, `TEXT` | text |
+| `DATE`, `DATETIME`, `TIMESTAMP` | dates and times |
+| `ENUM('a','b')` | one of a fixed list |
+
+## Security in one table
+
+[Full article](/wiki/web-security)
+
+| Threat | Defence |
+| --- | --- |
+| SQL injection | Prepared statements |
+| XSS | `htmlspecialchars` on every output |
+| CSRF | POST for changes, `SameSite` cookies, CSRF tokens |
+| Broken access | Guard + `exit` on every protected file |
+| Password leaks | `password_hash` / `password_verify` |
+| Brute force | Lockout / rate limiting, 2FA |
+| Session fixation | `session_regenerate_id(true)` after login |
+
+## HTTP status codes
+
+| Code | Meaning |
+| --- | --- |
+| 200 | OK |
+| 302 | Redirect (`header('Location: …')`) |
+| 403 | Forbidden (`http_response_code(403)`) |
+| 404 | Not found |
+| 500 | Server error (check the error log) |

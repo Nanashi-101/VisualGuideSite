@@ -1,0 +1,78 @@
+<Goals>
+- What this wiki covers and how it is organised
+- The order to read it in, and why that order matters
+- How to study so the code ends up in *your* head, not just on the screen
+</Goals>
+
+## What this wiki is
+
+This is your personal reference for the **Computer and Media Lab** course at SRH Munich. The course teaches web development by building real applications, and this wiki follows the same idea: every concept is explained first, then shown in real code from the course, then practised.
+
+Think of it like a small Wikipedia that only contains what you need for this course, written in plain language. You can read it from start to finish like a book, or jump straight to one topic with the search (press <kbd>Ctrl</kbd> + <kbd>K</kbd>).
+
+<Mochi>
+Hi, I'm Mochi! I pop up when something is easier to understand with a simple comparison. You will also find blue **Note** boxes for extra detail, green **Tip** boxes for good habits, and yellow **Careful** boxes for common mistakes.
+</Mochi>
+
+## The big picture
+
+Every project in the course is a **web application**: a program that runs on a server and is used through a web browser. The professor's slides list the most common kinds: websites, web portals, enterprise applications, social networks and email services. They all work the same way underneath:
+
+1. A **browser** (the client) asks for a page.
+2. A **web server** (Apache) receives the request.
+3. A **program** (PHP) builds the answer, often by reading or writing a **database** (MySQL).
+4. The server sends back **HTML**, which the browser draws on the screen.
+
+The tools that make this run on your laptop come in one package called **XAMPP**: Apache, MySQL (MariaDB), PHP and Perl. You write the code in **Visual Studio Code**.
+
+| Layer | What it does | Language / tool |
+| --- | --- | --- |
+| Frontend | What the user sees and clicks | HTML, CSS, JavaScript, Bootstrap |
+| Backend | Logic, rules, security | PHP |
+| Database | Stores data permanently | MySQL / MariaDB, SQL |
+| Server | Receives requests, runs PHP | Apache (inside XAMPP) |
+
+## The learning path
+
+The sidebar is ordered on purpose. Each section uses ideas from the one before it.
+
+1. **Getting started**: how the web works and how to set up XAMPP. Without this, nothing else runs.
+2. **HTML & forms**: the structure of pages and how users send data. Forms are the entry point of every PHP program in the course.
+3. **PHP fundamentals**: variables, decisions, loops, arrays, functions and reading form data. This is the core programming part.
+4. **Databases**: designing tables, writing SQL and connecting PHP to MySQL.
+5. **Login & security**: sessions, password hashing, two-factor authentication and protecting against attacks.
+6. **Projects**: the professor's Student Management Web application (SMW) and the Kraftwerk fitness center site, explained file by file, plus a tutorial to build it yourself.
+7. **Reference**: debugging, a cheat sheet and a glossary for quick lookups.
+
+<Note title="How the course weeks map to the wiki">
+Week 1 covers *How the web works*, *Setting up XAMPP*, *HTML forms* and *PHP basics*. Week 2 covers *Decisions*, *Loops* and *PHP + MySQL*. Week 3 covers *Sessions & login* and *Password hashing & 2FA*. The SMW project runs through all weeks.
+</Note>
+
+## How to study with this wiki
+
+Reading code is not the same as being able to write it. The goal of every article is that you can close the page and write the code yourself. This routine works:
+
+1. **Read the explanation once without coding.** Focus on *why* something works, not on memorising syntax.
+2. **Type the examples yourself** into a file in `C:\xampp\htdocs` and run them in the browser. Do not copy and paste: typing builds memory, and your typos teach you how errors look.
+3. **Change one thing at a time** and predict what will happen before you reload. If the result surprises you, that is exactly where you learn.
+4. **Do the exercise** at the end of the article before you open the solution. Struggling for ten minutes is useful; struggling for an hour is not, so then peek.
+5. **Mark the article as learned** at the bottom of the page. Your progress shows on the home page.
+
+<Tip>
+Keep a file called `notes.php` in `htdocs` where you collect small snippets that you wrote yourself. By the end of the course it becomes your own cheat sheet, and you will remember it far better than one you only read.
+</Tip>
+
+## What you need
+
+- A Windows laptop with **XAMPP** installed (see [Setting up XAMPP](/wiki/setup-xampp)).
+- **Visual Studio Code** as your editor.
+- A browser (Chrome, Edge or Firefox) with the developer tools (press <kbd>F12</kbd>).
+- A phone with **Google Authenticator** or **Microsoft Authenticator** for the two-factor login chapters.
+
+<Exercise title="Get your bearings">
+Open the sidebar and find the three articles you think will be hardest for you. Write their names in your `notes.php` file as a comment. When you reach them, read them twice and do every exercise.
+
+<Solution>
+There is no wrong answer here. Most students find **PHP + MySQL** (because many things happen at once), **Sessions & login** (because state is invisible) and **Password hashing & 2FA** (because of the maths) the hardest. Each of those articles has extra diagrams and step-by-step walkthroughs for exactly that reason.
+</Solution>
+</Exercise>

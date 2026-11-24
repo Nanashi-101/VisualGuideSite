@@ -1,0 +1,213 @@
+<Goals>
+- How a form sends data to PHP: `action`, `method` and `name`
+- The difference between GET and POST, and when to use each
+- Input types: text, email, password, number, date, file, hidden, select, textarea, checkbox, radio
+- Labels, `fieldset` and `legend` for usable, accessible forms
+- Built-in browser validation (`required`, `minlength`, `pattern`) and why it is never enough
+</Goals>
+
+## Why forms matter so much
+
+Almost every PHP program in this course starts with a form. Registering, logging in, entering a 2FA code, adding a student, sending a contact message: all forms. A form is the bridge from the browser to PHP.
+
+## The three attributes that make a form work
+
+```html
+<form action="login.php" method="post">
+  <input type="text" name="username">
+  <input type="password" name="password">
+  <button type="submit">Login</button>
+</form>
+```
+
+| Attribute | On | Meaning | If you forget it |
+| --- | --- | --- | --- |
+| `action` | `form` | Which file receives the data | The form sends to the *same* page. Often what you want. |
+| `method` | `form` | `get` or `post` | Defaults to `get`: data appears in the URL. |
+| `name` | each field | The key under which the value arrives in PHP | **The field is not sent at all.** The most common form bug. |
+
+When the button is clicked the browser collects every field that has a `name`, builds `name=value` pairs and sends a new request to `action`. In PHP they arrive in the `$_POST` (or `$_GET`) array, keyed by the `name`:
+
+```php:login.php
+<?php
+echo $_POST['username'];   // whatever was typed into name="username"
+```
+
+## GET vs POST, live
+
+Type in the fields and switch the method. Watch what the URL looks like and what PHP receives.
+
+<FormDemo />
+
+| | GET | POST |
+| --- | --- | --- |
+| Data travels in | the URL: `login.php?username=anna&password=123` | the request body (invisible in the URL) |
+| Visible in history and logs | yes | no |
+| Can be bookmarked or shared | yes | no |
+| Size limit | about 2,000 characters in practice | very large (files are possible) |
+| Browser re-sends on reload | silently | asks "resubmit form?" |
+| Use for | searching, filtering, choosing a tab | anything that changes data or contains secrets |
+
+<Warning>
+POST is **not encryption**. It only keeps data out of the URL. Anyone watching the network can still read it unless the site uses **HTTPS**. Real websites must use HTTPS for every login form.
+</Warning>
+
+## The professor's first forms
+
+The Week 1 exercise has a login form:
+
+<Source file="Exercises/Week1_HTMLFormsPhP_LNH/Forms.html" from={4} to={12} lang="html" />
+
+Look closely and you can spot two things to improve:
+
+1. The password field is `type="text"`, so the password is visible while typing. It should be `type="password"`.
+2. `action="#"` with `method="post"` sends the data to the same page, which only works if that page is a `.php` file that reads `$_POST`. A `.html` file cannot process anything.
+
+The second exercise groups fields with `fieldset` and `legend`:
+
+<Source file="Exercises/Week1_HTMLFormsPhP_LNH/Forms_fieldset_legend.html" from={33} to={47} lang="html" />
+
+<Warning title="Spot the bug">
+Both inputs in the "Experience Data" form are named `position`. When two fields share a name, PHP only keeps the **last** one, so the position text ("Professor") is lost and `$_POST['position']` contains the year. Every field needs a unique `name` (unless you deliberately use an array name like `name="hobbies[]"`).
+</Warning>
+
+## Input types
+
+The `type` attribute changes the keyboard on phones, the built-in validation and how the value looks.
+
+```html
+<input type="text"     name="first_name">
+<input type="email"    name="email">          <!-- must contain @, phone shows @ key -->
+<input type="password" name="password">       <!-- hidden characters -->
+<input type="number"   name="year" min="1900" max="2100" step="1">
+<input type="date"     name="birthdate">      <!-- date picker, sends YYYY-MM-DD -->
+<input type="tel"      name="phone">          <!-- number keypad on phones -->
+<input type="hidden"   name="id" value="17">  <!-- not shown, but sent -->
+<input type="file"     name="userfile">       <!-- needs enctype on the form, see below -->
+<input type="submit"   value="Save">          <!-- or <button type="submit"> -->
+```
+
+### Choosing from options
+
+```html
+<!-- dropdown: the value attribute is what gets sent, the text is what is shown -->
+<select name="plan_id">
+  <option value="">Choose a plan</option>
+  <option value="1">Basic</option>
+  <option value="2" selected>Premium</option>
+</select>
+
+<!-- radio buttons: same name = only one can be chosen -->
+<label><input type="radio" name="role" value="member" checked> Member</label>
+<label><input type="radio" name="role" value="admin"> Admin</label>
+
+<!-- checkbox: only sent when ticked -->
+<label><input type="checkbox" name="newsletter" value="1"> Send me news</label>
+
+<!-- several lines of text -->
+<textarea name="message" rows="5" maxlength="500"></textarea>
+```
+
+The fitness admin panel builds its plan dropdown from the database. PHP loops over the plans and prints one `option` per row, marking the current one with `selected`:
+
+<Source file="Project/fitness_center/admin.php" from={97} to={99} />
+
+<Note title="Checkboxes are only sent when ticked">
+An unticked checkbox sends nothing, so `$_POST['newsletter']` does not exist. In PHP always check with `isset($_POST['newsletter'])` instead of reading it directly.
+</Note>
+
+### File uploads
+
+To upload a file, the form needs `method="post"` **and** `enctype="multipart/form-data"`. Without the `enctype`, only the file *name* is sent. The professor's add-student form does it like this:
+
+<Source file="Learning/SMW_AdminModule/Students/adminn.php" from={211} to={211} lang="html" />
+<Source file="Learning/SMW_AdminModule/Students/adminn.php" from={244} to={248} lang="html" />
+
+In PHP the file arrives in `$_FILES['userfile']` (with `name`, `tmp_name`, `size`, `error`), not in `$_POST`.
+
+## Labels and accessibility
+
+Every field needs a visible **label**. Placeholders disappear when you type, so they are not a replacement.
+
+```html
+<label for="email">Email</label>
+<input id="email" type="email" name="email" autocomplete="email">
+```
+
+The label's `for` matches the input's `id`. Clicking the label now focuses the field, screen readers read "Email, edit text", and the click area is bigger on phones. Wrapping also works: `<label>Email <input type="email" name="email"></label>`.
+
+`fieldset` groups related fields and `legend` names the group, which helps long forms. `autocomplete` lets browsers and password managers fill fields correctly; for the 2FA code field the fitness site uses `autocomplete="one-time-code"`, so phones can suggest the code from an SMS or authenticator.
+
+## Browser validation
+
+HTML can check input *before* sending:
+
+```html
+<input type="email" name="email" required>
+<input type="password" name="password" minlength="8" required>
+<input name="code" inputmode="numeric" pattern="\d{6}" maxlength="6" required>
+```
+
+| Attribute | Checks |
+| --- | --- |
+| `required` | Field is not empty |
+| `type="email"` | Looks like an email |
+| `minlength` / `maxlength` | Text length |
+| `min` / `max` / `step` | Number or date range |
+| `pattern` | A regular expression; `\d{6}` means exactly six digits |
+
+<Warning title="Browser validation is a convenience, not security">
+Anyone can remove `required` in the developer tools, or send a request without a browser at all. **PHP must check everything again.** The fitness site validates the email with `filter_var` and the password length with `strlen` on the server, even though the form already has `type="email"` and `minlength="8"`. See [Handling form data](/wiki/php-forms).
+</Warning>
+
+## Putting it together: the Kraftwerk registration form
+
+```html:register.php (form part)
+<form method="post">
+  <div class="form-floating mb-3">
+    <input type="email" name="email" class="form-control" id="e" placeholder="Email" required>
+    <label for="e">Email</label>
+  </div>
+  <div class="form-floating mb-3">
+    <input type="password" name="password" class="form-control" id="p" placeholder="Password" minlength="8" required>
+    <label for="p">Password (min. 8 characters)</label>
+  </div>
+  <button class="btn btn-primary w-100 py-2">Create account</button>
+</form>
+```
+
+No `action`, so it posts back to `register.php`, which is both the form *and* the code that processes it. That "one file shows the form and handles it" pattern is used on every page of the fitness site. The `form-floating`, `form-control` and `btn` classes come from Bootstrap and only change the looks.
+
+<Exercise title="Contact form">
+Write `contact.html` with a form that posts to `contact.php` and has: an email field (required), a subject dropdown with "Membership", "Classes", "Other", a message textarea (required, max 500 characters) and a checkbox "Call me back". Every field needs a proper label. Then write `contact.php` that prints all received values with `print_r($_POST);`.
+
+<Solution>
+```html:contact.html
+<form action="contact.php" method="post">
+  <label for="email">Your email</label>
+  <input id="email" type="email" name="email" autocomplete="email" required>
+
+  <label for="subject">Subject</label>
+  <select id="subject" name="subject">
+    <option value="membership">Membership</option>
+    <option value="classes">Classes</option>
+    <option value="other">Other</option>
+  </select>
+
+  <label for="message">Message</label>
+  <textarea id="message" name="message" rows="5" maxlength="500" required></textarea>
+
+  <label><input type="checkbox" name="callback" value="1"> Call me back</label>
+
+  <button type="submit">Send</button>
+</form>
+```
+```php:contact.php
+<?php
+echo '<pre>';
+print_r($_POST);
+echo '</pre>';
+```
+Submit once with the checkbox ticked and once without. Without it, `callback` is missing from the output entirely.
+</Solution>
+</Exercise>

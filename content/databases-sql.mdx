@@ -1,0 +1,261 @@
+<Goals>
+- What a relational database is: databases, tables, rows, columns
+- Column types and constraints: `INT`, `VARCHAR`, `DATE`, `DECIMAL`, `NOT NULL`, `DEFAULT`, `UNIQUE`
+- Primary keys, `AUTO_INCREMENT` and foreign keys: how tables are linked
+- Designing tables for a project (one-to-many and one-to-one relationships)
+- The SQL statements of the course: `CREATE TABLE`, `INSERT`, `SELECT`, `UPDATE`, `DELETE`
+- Filtering, sorting, searching with `LIKE`, counting, and `JOIN`
+</Goals>
+
+## Why a database?
+
+A PHP script forgets everything when it finishes (remember: HTTP is stateless). To keep members, plans and messages **between** requests you need permanent storage. You could write to text files, but a **database** gives you fast searching, rules that keep data correct, safe concurrent access by many users, and a powerful question language: **SQL**.
+
+XAMPP ships **MariaDB**, a drop-in replacement for **MySQL**. Everything here works on both; the course and this wiki say "MySQL".
+
+## The building blocks
+
+```text
+Database server (MySQL)
+└── Database  fitness_center
+    ├── Table  users          ← like one spreadsheet
+    │   ├── columns: id | email | password_hash | role | created_at
+    │   ├── row 1:    8 | ishika@… | $2y$10$…   | admin | 2026-11-23 …
+    │   └── row 2:    9 | anna@…   | $2y$10$…   | member| 2026-11-24 …
+    ├── Table  plans
+    └── Table  members
+```
+
+| Term | Meaning | Spreadsheet analogy |
+| --- | --- | --- |
+| Database | A named collection of tables for one project | A workbook file |
+| Table | One kind of thing (users, plans) | A sheet |
+| Column (field) | One property, with a fixed type | A column header |
+| Row (record) | One thing (one user) | One line |
+| Primary key | The column that uniquely identifies each row | A row number that never changes |
+
+## Column types
+
+| Type | Stores | Example column |
+| --- | --- | --- |
+| `INT` | Whole numbers | `id`, `plan_id` |
+| `TINYINT` | Small numbers (−128…127) or yes/no (0/1) | `enabled`, `failed_count` |
+| `DECIMAL(6,2)` | Exact decimals: 6 digits, 2 after the point | `price_eur` (24.90) |
+| `VARCHAR(n)` | Text up to n characters | `email VARCHAR(150)` |
+| `TEXT` | Long text | an article body |
+| `DATE` | `YYYY-MM-DD` | `birthdate` |
+| `DATETIME` / `TIMESTAMP` | Date and time | `created_at`, `locked_until` |
+| `ENUM('a','b')` | One value from a fixed list | `role ENUM('member','admin')` |
+| `LONGBLOB` | Binary data (files) | SMW's student `image` |
+
+<Warning title="Never store money as FLOAT">
+Floating-point numbers cannot store 0.1 exactly, so sums drift (0.1 + 0.2 = 0.30000000000000004). Use `DECIMAL` for prices, as the fitness `plans` table does.
+</Warning>
+
+## Constraints: rules the database enforces
+
+| Constraint | Effect |
+| --- | --- |
+| `NOT NULL` | The column must always have a value |
+| `DEFAULT x` | Value used when an insert does not mention the column |
+| `UNIQUE` | No two rows may share this value. `users.email` is unique, so nobody can register twice with one email. |
+| `PRIMARY KEY` | Unique + not null; the row's identity |
+| `AUTO_INCREMENT` | MySQL picks the next number (1, 2, 3, …) for new rows |
+| `FOREIGN KEY` | The value must exist in another table's key column |
+
+Constraints are your **last line of defence**. Even if PHP has a bug, the database refuses data that breaks the rules. The fitness registration code relies on this: it does not check whether the email exists first; it tries the insert and catches the `UNIQUE` violation (error code `23000`).
+
+## Keys and relationships
+
+Tables are linked through **keys**. A **foreign key** is a column that stores the primary key of a row in another table.
+
+<ErDiagram />
+
+- **One-to-many**: one plan has many members; each member has exactly one plan. The "many" side (`members`) holds the foreign key `plan_id`.
+- **One-to-one**: each user has at most one 2FA secret. `user_2fa.user_id` is both its primary key and a foreign key to `users.id`.
+
+The professor's SMW database uses the same idea: `students.ID_Faculty` references `faculties.ID_Faculty`.
+
+<Mochi>
+A foreign key is like writing your class number on your homework instead of the whole class list. The class list exists once, in its own place; everyone else just points to it. If the class is renamed, nothing else needs to change.
+</Mochi>
+
+### Why not put the plan name directly into members?
+
+Because then "Premium" would be stored hundreds of times. Renaming it means updating every member, and a typo ("Premum") silently creates a new plan. Storing each fact **once** and linking to it is called **normalisation**. Rule of thumb: if you see the same text repeated in many rows, it probably belongs in its own table.
+
+### What happens on delete?
+
+`FOREIGN KEY (plan_id) REFERENCES plans(id)` means MySQL **refuses** to delete a plan that members still use. The fitness admin catches that error and shows "Cannot delete: it is still in use". For `user_2fa` the key is declared `ON DELETE CASCADE`: deleting a user automatically deletes their 2FA secret too.
+
+## Creating tables
+
+Here is the complete fitness database. Read it slowly: every line is a decision.
+
+<Source file="Project/fitness_center/install.sql" />
+
+A few details:
+
+- `CREATE ... IF NOT EXISTS` makes the script safe to run twice.
+- `ENGINE=InnoDB` is the MySQL storage engine that supports foreign keys and transactions.
+- `utf8mb4` stores every character including emoji (plain `utf8` in MySQL is a broken 3-byte subset).
+- The final `INSERT … WHERE NOT EXISTS` adds the three default plans only if the table is still empty.
+
+## The four basic operations: CRUD
+
+Almost every application does four things with data: **C**reate, **R**ead, **U**pdate, **D**elete.
+
+### INSERT (create)
+
+```sql
+INSERT INTO plans (name, price_eur) VALUES ('Day Pass', 9.50);
+
+INSERT INTO members (first_name, last_name, birthdate, plan_id)
+VALUES ('Anna', 'Schmidt', '1995-03-02', 2);
+```
+
+List the columns, then the values in the same order. Skip `id` (auto-increment) and columns with defaults. Text and dates go in single quotes; numbers do not.
+
+### SELECT (read)
+
+```sql
+SELECT * FROM plans;                                   -- every column, every row
+SELECT name, price_eur FROM plans;                     -- chosen columns
+SELECT * FROM plans WHERE price_eur < 30;              -- filter
+SELECT * FROM plans ORDER BY price_eur;                -- sort ascending (DESC for descending)
+SELECT * FROM members ORDER BY last_name LIMIT 10;     -- only the first 10
+SELECT COUNT(*) FROM users;                            -- how many rows
+SELECT * FROM users WHERE email = 'anna@example.de';   -- exact match
+SELECT * FROM members WHERE last_name LIKE '%mid%';    -- contains "mid"
+```
+
+`LIKE` uses `%` for "any number of characters" and `_` for "exactly one character". `'%mid%'` matches Schmidt and Midler. The professor's student search builds exactly this kind of query.
+
+Combine conditions with `AND`, `OR` and brackets:
+
+```sql
+SELECT * FROM members
+WHERE plan_id = 2 AND (birthdate IS NULL OR birthdate > '2000-01-01');
+```
+
+Use `IS NULL` / `IS NOT NULL` to test for empty values. `= NULL` never matches anything.
+
+### UPDATE (change)
+
+```sql
+UPDATE plans SET price_eur = 26.90 WHERE id = 1;
+UPDATE users SET failed_count = 0 WHERE id = 8;
+UPDATE users SET failed_count = failed_count + 1 WHERE id = 8;   -- based on the old value
+```
+
+### DELETE (remove)
+
+```sql
+DELETE FROM contacts WHERE id = 15;
+```
+
+<Warning title="Always write the WHERE first">
+`UPDATE plans SET price_eur = 0;` and `DELETE FROM members;` without a `WHERE` change or delete **every row**, with no undo. Write the `WHERE` before anything else, and test it as a `SELECT` first: `SELECT * FROM members WHERE id = 5;` shows exactly what a `DELETE … WHERE id = 5` would hit.
+</Warning>
+
+## Combining tables: JOIN
+
+The members table only stores `plan_id`, a number. To show the plan *name* next to each member, you **join** the two tables on the matching key:
+
+```sql
+SELECT m.first_name, m.last_name, p.name AS plan, p.price_eur
+FROM members m
+JOIN plans p ON p.id = m.plan_id
+ORDER BY m.last_name;
+```
+
+- `members m` gives the table a short alias `m`.
+- `ON p.id = m.plan_id` says how rows belong together.
+- `AS plan` renames the output column, so PHP reads it as `$row['plan']`.
+
+| Join | Returns |
+| --- | --- |
+| `JOIN` (= `INNER JOIN`) | Only rows that have a match on both sides |
+| `LEFT JOIN` | All rows from the left table, with `NULL` where the right side has no match |
+
+The professor's user page uses a `LEFT JOIN` so that a faculty **without students** still appears:
+
+<Source file="Learning/SMW_UserModule/index.php" from={14} to={26} lang="sql" />
+
+The fitness admin's users tab uses `LEFT JOIN` for the same reason: users who have not set up 2FA yet have no row in `user_2fa`, and `COALESCE(f.enabled, 0)` turns that missing value into 0.
+
+```sql
+SELECT u.id, u.email, u.role, u.created_at, COALESCE(f.enabled, 0) AS tfa
+FROM users u LEFT JOIN user_2fa f ON f.user_id = u.id
+ORDER BY u.id;
+```
+
+## Aggregates and grouping
+
+```sql
+SELECT COUNT(*) FROM members;                                   -- total members
+SELECT AVG(price_eur), MIN(price_eur), MAX(price_eur) FROM plans;
+
+SELECT p.name, COUNT(m.id) AS members                            -- members per plan
+FROM plans p LEFT JOIN members m ON m.plan_id = p.id
+GROUP BY p.id, p.name
+ORDER BY members DESC;
+```
+
+`GROUP BY` collapses rows with the same value into one row per group, and functions like `COUNT`, `SUM` and `AVG` summarise each group. This is how dashboards get their numbers.
+
+<Exercise title="Design a classes feature">
+Kraftwerk wants group classes (Yoga Monday 18:00, HIIT Tuesday 19:00…) and members can book them. Design the tables: which tables, which columns and types, which keys? Then write the SQL to list all bookings for one class with the member names.
+
+<Solution>
+Two new tables. A class exists once; a booking links one member to one class, which makes members ↔ classes a **many-to-many** relationship resolved by the `bookings` table in the middle.
+
+```sql
+CREATE TABLE classes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(80) NOT NULL,
+  starts_at DATETIME NOT NULL,
+  capacity INT NOT NULL DEFAULT 20
+) ENGINE=InnoDB;
+
+CREATE TABLE bookings (
+  member_id INT NOT NULL,
+  class_id INT NOT NULL,
+  booked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (member_id, class_id),                 -- a member can book a class only once
+  FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE,
+  FOREIGN KEY (class_id)  REFERENCES classes(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+SELECT m.first_name, m.last_name, b.booked_at
+FROM bookings b
+JOIN members m ON m.id = b.member_id
+WHERE b.class_id = 3
+ORDER BY b.booked_at;
+```
+The **composite primary key** `(member_id, class_id)` lets the database itself prevent double bookings.
+</Solution>
+</Exercise>
+
+<Exercise title="Write the queries">
+Using the fitness tables, write SQL for: (1) all plans cheaper than 25 €, cheapest first; (2) the number of members per plan, including plans with zero members; (3) raise every price by 5%; (4) delete contact messages older than 90 days.
+
+<Solution>
+```sql
+-- 1
+SELECT name, price_eur FROM plans WHERE price_eur < 25 ORDER BY price_eur;
+
+-- 2
+SELECT p.name, COUNT(m.id) AS members
+FROM plans p LEFT JOIN members m ON m.plan_id = p.id
+GROUP BY p.id, p.name;
+
+-- 3
+UPDATE plans SET price_eur = ROUND(price_eur * 1.05, 2);
+
+-- 4
+DELETE FROM contacts WHERE created_at < NOW() - INTERVAL 90 DAY;
+```
+In (2), `COUNT(m.id)` counts only matched members, so plans with nobody show 0; `COUNT(*)` would wrongly show 1. In (3) an `UPDATE` without `WHERE` is intended for once, so think twice and run the matching `SELECT` first.
+</Solution>
+</Exercise>

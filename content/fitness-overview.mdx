@@ -1,0 +1,173 @@
+<Goals>
+- What the Kraftwerk Fitness site does and how it relates to the professor's SMW
+- The requirements and the decisions made before writing any code
+- Every folder and file, and why the project is split this way
+- The database design
+- How a request travels through the code, for both a public page and a protected page
+- How to run it on your own laptop
+</Goals>
+
+## The assignment
+
+> Build a website for a German fitness center using the professor's code and concepts. Logins and logouts require Google Authenticator. The admin can see the list of users. There must be a working database.
+
+**Kraftwerk Fitness München** is the result. It is the SMW project's ideas applied to a new domain, with the Week 3 Google Authenticator starter built in and the security improvements from this wiki applied throughout.
+
+## Features
+
+| Area | Feature |
+| --- | --- |
+| Public | Landing page with photos, programs, membership plans **loaded from the database**, gallery, contact form |
+| Accounts | Register with email + password (hashed); the **first account becomes admin** |
+| Login | Password, then a **mandatory** Google Authenticator code; first login shows a QR code to set it up |
+| Logout | Requires a fresh Authenticator code (as the assignment asks) |
+| Protection | 5 wrong passwords or codes in a row lock the account for 15 minutes |
+| Admin | Stats, list of all users with role and 2FA status, CRUD for members and plans, contact messages |
+| Design | Bootstrap 5 dark theme, custom CSS, scroll animations, responsive down to phone width |
+
+## From SMW to Kraftwerk
+
+The mapping was the first design step: reuse what the professor built and change the domain.
+
+| SMW (professor) | Kraftwerk | Notes |
+| --- | --- | --- |
+| `faculties` | `plans` | gains a monthly price |
+| `students` (belong to a faculty) | `members` (belong to a plan) | same one-to-many shape; photo upload left out |
+| `contacts` + `addContact.php` | `contacts`, handled inside `index.php` | prepared statement, longer message |
+| `users` (plain text) / `users_auth` (Week 3) | `users` with `password_hash` and `role` | merged into one table |
+| `user_2fa`, `totp.php` (Week 3 GoogleAuth) | `user_2fa`, same `totp.php` | QR drawn locally with `qr_fcm.js` |
+| `check.php` | `require_login()`, `require_admin()` | in `config.php`, with `exit` |
+| One folder per entity, one file per action | One `admin.php` with tabs and a `switch` on the action | fewer files for a small admin |
+| HTML head repeated in every file | `page_head()` / `page_foot()` | one place to change the layout |
+
+## Decisions made before coding
+
+Good projects start with questions, not code. These were asked and answered first:
+
+1. **Reuse or start fresh?** The Week 3 GoogleAuth starter already had working TOTP code. Reuse it rather than reinvent cryptography.
+2. **Where does the code live?** In `C:\xampp\htdocs\fitness_center` so Apache can serve it, with a copy in the course's `Project/` folder.
+3. **mysqli or PDO?** PDO: prepared statements are shorter, and the GoogleAuth starter already uses it.
+4. **How much of SMW?** The full pattern: public page with contact form, admin with CRUD, user list, 2FA.
+5. **Who becomes admin?** No default password in the SQL file. Instead, whoever registers first is admin. Simple, and there is never a known `admin/admin` account.
+
+## Directory structure
+
+<FileTree>{`
+fitness_center/
+  install.sql        # creates the database, tables and the three default plans
+  config.php         # included by every page: PDO, session, helpers, layout, lockout, code check
+  totp.php           # the professor's Google Authenticator maths (unchanged)
+  qr_fcm.js          # draws the QR code in the browser (from the FCM_GoogleAuth package)
+  style.css          # all custom design on top of Bootstrap
+  site.js            # scroll animations, counters, navbar effect
+  index.php          # public landing page + contact form handler
+  register.php       # create an account
+  login.php          # password step → sends to setup or verify
+  setup_2fa.php      # first login: QR code + confirm the first code
+  verify_2fa.php     # later logins: ask for the code
+  dashboard.php      # landing page after login
+  admin.php          # admin panel: users, members, plans, messages
+  logout.php         # needs a code, then destroys the session
+`}</FileTree>
+
+### Why it is split this way
+
+- **One file per page** that a user can open. Each starts with `require 'config.php';` and, if protected, a guard on the next line.
+- **Everything shared lives in `config.php`**: the database connection, the session setup, small helpers (`h`, `go`, `me`), the guards, the page frame, the lockout and the code check. If you change a rule, you change it once.
+- **Library code is kept separate and untouched** (`totp.php`, `qr_fcm.js`), so it is clear what was written for this project and what was reused.
+- **Design is separate from logic**: `style.css` and `site.js` contain no PHP, and the PHP files contain no large CSS blocks.
+- **No sub-folders.** With fourteen files, folders would add path problems without adding clarity. If the project grew (say, a booking system), a typical next step is `includes/` for shared PHP, `public/` for the pages and `assets/` for CSS, JS and images.
+
+<Mochi>
+Think of `config.php` as the kitchen's shared shelf of tools and ingredients. Every recipe (page) starts by walking to that shelf. Nobody keeps their own private salt shaker in every drawer.
+</Mochi>
+
+## The database
+
+<ErDiagram />
+
+<Source file="Project/fitness_center/install.sql" from={5} to={20} lang="sql" />
+
+| Table | One row is | Key points |
+| --- | --- | --- |
+| `users` | an account | `email` is `UNIQUE`; `password_hash` is 255 chars; `role` is an `ENUM`; `failed_count` + `locked_until` power the lockout |
+| `user_2fa` | a user's authenticator secret | primary key = foreign key to `users` (one-to-one), `ON DELETE CASCADE` |
+| `plans` | a membership type | `DECIMAL(6,2)` for money |
+| `members` | a gym member | `plan_id` references `plans` (one-to-many) |
+| `contacts` | a message from the contact form | stand-alone |
+
+Note that **users** (people who can log in) and **members** (people who train at the gym) are different tables, just like SMW's `users` and `students`. Staff manage members; not every member needs a website account.
+
+## How a request flows
+
+### A public page: the home page
+
+```text
+GET /fitness_center/
+ └─ index.php
+     ├─ require 'config.php'      → PDO connection, session_start(), helpers
+     ├─ POST? no
+     ├─ SELECT name, price_eur FROM plans   → $plans
+     ├─ page_head('Home')         → <head>, navbar (shows Login/Join because me() is null)
+     ├─ HTML sections, foreach over $plans, $programs, $gallery
+     └─ page_foot()               → footer, bootstrap.js, site.js
+```
+
+### A protected page: the admin panel
+
+```text
+GET /fitness_center/admin.php?t=members
+ └─ admin.php
+     ├─ require 'config.php'
+     ├─ require_admin()
+     │    ├─ no $_SESSION['user']        → 302 login.php, exit
+     │    └─ role !== 'admin'            → 403 "Admins only.", exit
+     ├─ $t = 'members' (validated against $tabs)
+     ├─ POST? no
+     ├─ load stats, plans, members (JOIN plans)
+     └─ render tabs + form + table
+```
+
+### The login flow
+
+<LoginVideo />
+
+```text
+login.php ──password ok──▶ $_SESSION['pre'] ──▶ setup_2fa.php (first time) or verify_2fa.php
+                                                   └─ code ok ─▶ finish_login() ─▶ $_SESSION['user'] ─▶ dashboard.php
+```
+
+The details of each file are in the [code walkthrough](/wiki/fitness-walkthrough).
+
+## Running it on your laptop
+
+1. Copy the `fitness_center` folder into `C:\xampp\htdocs\`.
+2. Start **Apache** and **MySQL** in the XAMPP Control Panel.
+3. Create the database by importing `install.sql` (phpMyAdmin → Import, or the command below).
+4. Open `http://localhost/fitness_center/register.php` and create your account: it becomes the admin.
+5. Log in, scan the QR code with Google Authenticator, enter the 6-digit code.
+6. Open **Admin** to see the user list.
+
+```powershell
+C:\xampp\mysql\bin\mysql.exe -u root < C:\xampp\htdocs\fitness_center\install.sql
+```
+
+<Warning title="Locked out?">
+If you lose the phone or the lockout triggers while testing, reset in phpMyAdmin (SQL tab):
+
+`UPDATE users SET locked_until = NULL, failed_count = 0;` clears the lock.
+`DELETE FROM user_2fa WHERE user_id = 8;` removes a user's authenticator, so the next login shows a new QR code.
+</Warning>
+
+The site needs internet for Bootstrap, fonts and the photos (all loaded from CDNs).
+
+<Exercise title="Draw the flow yourself">
+Without looking, draw on paper what happens from typing `localhost/fitness_center/logout.php` to arriving on `login.php`, for a logged-in user who first types a wrong code and then the right one. Include which file runs, which session keys exist and which HTTP status codes are sent.
+
+<Solution>
+1. `GET logout.php` → `config.php` starts the session; `require_login()` sees `$_SESSION['user']` → shows the code form (**200**).
+2. `POST logout.php` with a wrong code → `code_ok()` returns false and calls `register_fail()` (failed_count +1) → the form is shown again with "Wrong code. You are still logged in." (**200**). `$_SESSION['user']` is unchanged.
+3. `POST logout.php` with the right code → `code_ok()` returns true and resets `failed_count` → `$_SESSION = []`, `session_destroy()`, cookie deleted → `go('login.php')` (**302**).
+4. `GET login.php` → a new, empty session → the login form (**200**).
+</Solution>
+</Exercise>

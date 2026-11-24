@@ -1,0 +1,190 @@
+<Goals>
+- Writing your own functions: parameters, default values, return values
+- Variable scope: why a function cannot see outside variables, and `global`
+- Type declarations and arrow functions
+- Splitting a project into files with `include`, `require`, `include_once`, `require_once`
+- How the fitness site's `config.php` acts as a shared toolbox
+</Goals>
+
+## Why functions
+
+A function is a named, reusable piece of code. You write it once and *call* it as often as you need. Functions give you three things:
+
+1. **No repetition.** The fitness site prints user data in dozens of places. Instead of writing `htmlspecialchars($x, ENT_QUOTES)` each time, it has a function `h($x)`.
+2. **Readable code.** `require_admin();` at the top of a page says what it does. Twenty lines of session checks do not.
+3. **One place to fix.** If the escaping rule changes, you change `h()` once and every page is fixed.
+
+## Defining and calling
+
+```php
+function greet($name, $greeting = 'Hello') {     // $greeting has a default value
+    return "$greeting, $name!";
+}
+
+echo greet('Ishika');              // Hello, Ishika!
+echo greet('Anna', 'Servus');      // Servus, Anna!
+```
+
+- **Parameters** are the inputs, listed in brackets. Inside the function they behave like normal variables.
+- A **default value** makes a parameter optional. Optional parameters go last.
+- `return` sends a value back to the caller **and ends the function**. A function without `return` gives back `null`.
+- `echo` inside a function prints immediately; `return` hands the value back so the caller decides what to do. Prefer `return`: it makes functions reusable.
+
+### Real examples from the fitness site
+
+```php
+function h($s) { return htmlspecialchars((string)$s, ENT_QUOTES); }
+function go($url) { header("Location: $url"); exit; }
+function me() { return $_SESSION['user'] ?? null; }
+function require_login() { if (!me()) go('login.php'); }
+```
+
+Four tiny functions, and each page becomes readable: `require_login();` at the top protects the page, `go('dashboard.php');` redirects, `<?= h($name) ?>` prints safely. Small, well-named functions are a hallmark of good code.
+
+<Mochi>
+A function is a recipe card. "Make pancakes (for 4 people)". You do not rewrite the recipe every Sunday; you pick up the card and pass in how many people are coming. The pancakes are the return value.
+</Mochi>
+
+## Scope: who can see which variable
+
+Variables created inside a function exist **only inside it**, and a function **cannot see** variables from outside:
+
+```php
+$issuer = 'Kraftwerk';
+
+function label() {
+    return $issuer;          // Warning: Undefined variable $issuer
+}
+```
+
+This isolation is a feature: functions cannot accidentally break each other's variables. There are three ways to give a function what it needs:
+
+| Way | Example | When |
+| --- | --- | --- |
+| Pass it as a parameter | `function label($issuer)` | Best default. Clear and testable. |
+| Use a constant | `const ISSUER = '...';` then `ISSUER` | Fixed values. Constants are visible everywhere. |
+| `global` keyword | `global $pdo;` inside the function | Shared objects like the database connection. Use sparingly. |
+
+The fitness site uses `global $pdo;` in its database helper functions because every one of them needs the same connection:
+
+<Source file="Project/fitness_center/config.php" from={80} to={85} />
+
+## Type declarations
+
+You can state what types a function expects and returns. PHP then refuses wrong input with a clear error instead of producing strange results:
+
+```php
+function yearlyPrice(float $monthly, int $months = 12): float {
+    return round($monthly * $months, 2);
+}
+
+yearlyPrice(24.90);          // 298.8
+yearlyPrice('abc');          // TypeError: must be of type float, string given
+```
+
+The course code mostly leaves types out, which is allowed. Adding them to your own functions catches mistakes early.
+
+## Arrow functions and anonymous functions
+
+A function can be stored in a variable or passed to another function. The short **arrow function** syntax returns a single expression and can read outside variables automatically:
+
+```php
+$vat = 1.19;
+$gross = fn($net) => round($net * $vat, 2);    // can use $vat without "global"
+echo $gross(24.90);                             // 29.63
+
+$names = array_map(fn($m) => $m['first_name'], $members);
+```
+
+You saw this with `array_map` and `array_filter` in [Arrays](/wiki/php-arrays).
+
+## Splitting code into files
+
+As soon as two pages need the same code (the database connection, the page header, helper functions) you move that code into its own file and pull it in.
+
+<Source file="Exercises/Week1_HTMLFormsPhP_LNH/Include.php" from={5} to={8} />
+
+`include 'Vars.php';` pastes the content of `Vars.php` at that spot, so `$color` and `$car` defined there can be used here.
+
+### The four variants
+
+| Statement | If the file is missing | If already included |
+| --- | --- | --- |
+| `include 'x.php'` | Warning, the script **continues** | Includes it again |
+| `require 'x.php'` | Fatal error, the script **stops** | Includes it again |
+| `include_once 'x.php'` | Warning, continues | Skips it |
+| `require_once 'x.php'` | Fatal error, stops | Skips it |
+
+**Use `require` (or `require_once`) for anything the page cannot work without**, like the database connection. If `config.php` is missing, you *want* the page to stop instead of showing a half-broken page full of errors. `_once` prevents "cannot redeclare function" errors when two files both include the same helper file.
+
+### How the projects use it
+
+The professor's SMW project has a `config.php` in each folder with the database connection, and every page starts with `include("config.php");`. The Week 3 login guards pages with `include('check.php')`:
+
+<Source file="Learning/Week3_Login/Login/check.php" />
+
+The fitness site goes one step further: **one** `config.php` holds the connection, the session setup and all helper functions, and every page starts with exactly one line:
+
+```php
+<?php
+require 'config.php';
+require_admin();          // a function defined in config.php
+```
+
+And `config.php` itself pulls in the TOTP functions:
+
+```php
+require_once __DIR__ . '/totp.php';
+```
+
+`__DIR__` is the folder of the current file. Using it makes the path work no matter which page included `config.php`.
+
+## Building page layouts from functions
+
+The fitness site avoids copying the same `<head>`, navbar and footer into nine pages. Instead, `config.php` defines `page_head($title)` and `page_foot()`, and every page looks like this:
+
+```php
+<?php
+require 'config.php';
+require_login();
+page_head('Dashboard'); ?>
+
+  <div class="container py-5"> ... page-specific HTML ... </div>
+
+<?php page_foot();
+```
+
+Changing the menu is now a one-file edit. The professor's project instead repeats the full HTML head and CSS in each file, which is simpler to read for a single page but means changing the menu requires editing every page.
+
+<Tip>
+A good rule: **if you copy and paste the same code a third time, make it a function** (or an include). Two copies are fine; three is a pattern.
+</Tip>
+
+<Exercise title="Your own helpers file">
+Create `helpers.php` with three functions: `euro(float $n): string` that formats 1500.5 as `1.500,50 €`, `age(string $birthdate): int` that takes `'1995-03-02'` and returns the age in years, and `badge(string $role): string` that returns `<span class="badge">ADMIN</span>` for any role in capitals. Use them from a second file `test.php` with `require_once`.
+
+<Solution>
+```php:helpers.php
+<?php
+function euro(float $n): string {
+    return number_format($n, 2, ',', '.') . ' €';
+}
+
+function age(string $birthdate): int {
+    return (new DateTime($birthdate))->diff(new DateTime())->y;
+}
+
+function badge(string $role): string {
+    return '<span class="badge">' . htmlspecialchars(strtoupper($role)) . '</span>';
+}
+```
+```php:test.php
+<?php
+require_once 'helpers.php';
+echo euro(1500.5), '<br>';
+echo age('1995-03-02'), '<br>';
+echo badge('admin');
+```
+`DateTime::diff()` calculates the exact difference including whether the birthday has passed this year, which simple year subtraction gets wrong. Even in a tiny helper the role is escaped with `htmlspecialchars`, because a function cannot know where its input came from.
+</Solution>
+</Exercise>

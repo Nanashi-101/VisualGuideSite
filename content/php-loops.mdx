@@ -1,0 +1,200 @@
+<Goals>
+- Why loops exist and how each kind works: `while`, `do…while`, `for`, `foreach`
+- How to pick the right loop for a task
+- Controlling loops with `break` and `continue`
+- Nested loops and building HTML tables with loops
+- The loop you will write most: fetching database rows
+- Avoiding infinite loops and off-by-one errors
+</Goals>
+
+## What a loop is
+
+A loop repeats a block of code. Instead of writing `echo` ten times, you describe the pattern once and let the computer repeat it. Every loop has the same three ingredients:
+
+1. **A start**: where counting begins, or which list to walk through.
+2. **A condition**: checked every time; when it becomes false, the loop stops.
+3. **A step**: something that changes each round so the condition eventually becomes false.
+
+If the step is missing, the condition never changes and the loop runs forever.
+
+<LoopDemo />
+
+## while
+
+`while` checks the condition **before** each round. If it is false at the start, the body never runs.
+
+<Source file="Learning/SimpleExcercises_week2/15 WhileLoop.php" from={5} to={12} />
+
+Read it as: *start with x = 1; while x is at most 5, print it and add one.* Output: 1, 2, 3, 4, 5. After printing 5, `$x` becomes 6, the check `6 <= 5` is false, and the loop ends.
+
+Use `while` when you **do not know in advance how many rounds** there will be. The classic case is reading database rows: you keep going while there is another row.
+
+```php
+while ($row = mysqli_fetch_assoc($result)) {
+    echo $row['username'];
+}
+```
+
+This line does two things at once: it fetches the next row into `$row`, and the loop condition checks that value. When there are no rows left, `mysqli_fetch_assoc` returns `null`, which is falsy, so the loop stops. You will see this pattern in the professor's `Display_form.php` and `SMW_UserModule/index.php`.
+
+## do … while
+
+`do…while` checks the condition **after** each round, so the body runs **at least once**.
+
+<Source file="Learning/SimpleExcercises_week2/16 DoWhileLoop.php" from={5} to={13} />
+
+With `$x = 10` at the start, `while` prints nothing, but `do…while` prints "The number is: 10" once. It is rare in web code. One use: "generate a random code, and generate again while it already exists in the database".
+
+## for
+
+`for` puts the start, condition and step in one line, which makes it perfect when you **know how many times** to repeat.
+
+```text
+for ( start ; condition ; step ) { body }
+for ($i = 1; $i <= 10;   $i++)  { ... }
+       │          │         └── runs after each round
+       │          └──────────── checked before each round
+       └─────────────────────── runs once, at the beginning
+```
+
+The professor's multiplication-table exercise reads a number from a form and uses `for` to build table rows:
+
+<Source file="Learning/Procedural_PhP_week2/Logic_loops.php" />
+
+Notice how the loop **builds HTML**: `<table>` is printed once before the loop, one `<tr>` per round inside it, and `</table>` once after. That structure (open, repeat, close) is how every list and admin table is built.
+
+## foreach
+
+`foreach` walks through **every item of an array**. No counter, no condition, no risk of going past the end.
+
+<Source file="Learning/Procedural_PhP_week2/foreach.php" />
+
+With an **associative array** (keys and values) you can get both:
+
+```php
+$prices = ['Basic' => 24.90, 'Premium' => 39.90, 'Student' => 19.90];
+
+foreach ($prices as $plan => $price) {
+    echo "$plan costs " . number_format($price, 2, ',', '.') . " €<br>";
+}
+```
+
+`foreach` is the most-used loop in modern PHP. Database libraries like PDO can return all rows as an array at once (`fetchAll()`), and you `foreach` over them. The fitness home page builds its pricing cards this way:
+
+```php
+<?php foreach ($plans as $k => $p): ?>
+  <div class="plan">
+    <h3><?= h($p['name']) ?></h3>
+    <span class="price">€<?= number_format($p['price_eur'], 2, ',', '.') ?></span>
+  </div>
+<?php endforeach; ?>
+```
+
+### The alternative syntax for templates
+
+Look at the colon `:` and `endforeach;` above. Inside HTML, PHP offers this form instead of braces for `if`, `foreach`, `for` and `while`:
+
+```php
+<?php if ($msg): ?>
+  <div class="alert"><?= h($msg) ?></div>
+<?php endif; ?>
+```
+
+It is easier to read than `<?php } ?>` floating in the middle of HTML, because you can see *which* block is ending.
+
+## Choosing the right loop
+
+| Situation | Loop |
+| --- | --- |
+| Walk through an array or a `fetchAll()` result | `foreach` |
+| Repeat a known number of times (1 to 10, 0 to n−1) | `for` |
+| Read rows one by one with `mysqli_fetch_assoc` | `while` |
+| Repeat until something happens, unknown count | `while` |
+| Must run at least once | `do…while` |
+
+## break and continue
+
+- `break` leaves the loop immediately.
+- `continue` skips the rest of **this** round and jumps to the next one.
+
+```php
+foreach ($members as $m) {
+    if ($m['plan'] === 'Student') continue;   // skip students
+    echo $m['name'] . '<br>';
+    if (++$shown === 10) break;               // stop after 10 names
+}
+```
+
+The professor's `totp.php` uses an early `return` inside a loop, which is like `break` but leaves the whole function. It checks the code for the previous, current and next 30-second window and stops as soon as one matches:
+
+<Source file="Learning/Week3_Login/GoogleAuth/totp.php" from={58} to={66} />
+
+## Nested loops
+
+A loop inside a loop runs the inner loop completely for **each** round of the outer one. The professor's user page groups students by faculty first, then loops twice: once over faculties, and inside, over the students of that faculty.
+
+<Source file="Learning/SMW_UserModule/index.php" from={29} to={37} />
+
+<Source file="Learning/SMW_UserModule/index.php" from={250} to={262} lang="php" />
+
+The first loop builds an array like `['Faculty of Computer Sciences' => [student, student], 'Faculty of Economics' => [...]]`. The second pair of loops prints one heading per faculty and one card per student. You will meet that "group then print" pattern again in [Arrays](/wiki/php-arrays).
+
+## Common bugs
+
+| Bug | Example | Result |
+| --- | --- | --- |
+| Infinite loop | forgetting `$x++` in a `while` | The page loads forever, then "Maximum execution time exceeded". |
+| Off by one | `for ($i = 0; $i <= count($a); $i++)` | Reads one item past the end: "Undefined array key". Use `<` with 0-based indexes. |
+| Changing the array while looping | adding items inside `foreach` over the same array | Confusing results. Build a new array instead. |
+| HTML outside the loop | `<tr>` printed before `foreach` | Only one row. Put the repeating part *inside*. |
+
+<Mochi>
+To find loop bugs, play computer: take a piece of paper, write down the variables, and go through two or three rounds by hand. Most off-by-one errors become obvious by round two.
+</Mochi>
+
+<Exercise title="Price table">
+Print an HTML table with the months 1 to 12 in the first column and the total cost of a 24,90 € membership after that many months in the second column. Highlight every 6th month with `<strong>`.
+
+<Solution>
+```php:price_table.php
+<?php
+$price = 24.90;
+echo '<table border="1" cellpadding="6">';
+echo '<tr><th>Month</th><th>Total paid</th></tr>';
+for ($m = 1; $m <= 12; $m++) {
+    $total = number_format($price * $m, 2, ',', '.') . ' €';
+    if ($m % 6 === 0) $total = "<strong>$total</strong>";
+    echo "<tr><td>$m</td><td>$total</td></tr>";
+}
+echo '</table>';
+```
+`$m % 6 === 0` is true for 6 and 12: the remainder of dividing by 6 is zero. The opening and closing `table` tags sit *outside* the loop.
+</Solution>
+</Exercise>
+
+<Exercise title="Group members by plan">
+Given this array, print a heading for each plan and a list of its members underneath, using two loops.
+```php
+$members = [
+  ['name' => 'Anna', 'plan' => 'Premium'],
+  ['name' => 'Ben',  'plan' => 'Basic'],
+  ['name' => 'Cleo', 'plan' => 'Premium'],
+];
+```
+
+<Solution>
+```php
+<?php
+$byPlan = [];
+foreach ($members as $m) {
+    $byPlan[$m['plan']][] = $m['name'];   // creates the inner array the first time
+}
+foreach ($byPlan as $plan => $names) {
+    echo "<h3>$plan</h3><ul>";
+    foreach ($names as $n) echo "<li>$n</li>";
+    echo '</ul>';
+}
+```
+`$byPlan[$m['plan']][] = ...` means "in the list for this plan, append a name". It is the same idea as the professor's `$faculty_students[$faculty][] = $row;`, written in one line.
+</Solution>
+</Exercise>

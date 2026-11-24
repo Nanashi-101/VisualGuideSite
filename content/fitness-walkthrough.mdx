@@ -1,0 +1,193 @@
+<Goals>
+- Read `config.php` section by section and understand every helper
+- Follow register → login → setup/verify → dashboard → logout through the real code
+- Understand the admin panel: tabs, the action `switch`, the reusable delete form, the edit form
+- See which PHP and SQL concepts from this wiki each part uses
+</Goals>
+
+<Note>
+Every code block below is loaded from the real files in `Project/fitness_center`, so it always matches what runs. Line numbers are shown in the title.
+</Note>
+
+## config.php: the shared toolbox
+
+Every page starts with `require 'config.php';`. It is about 100 lines and has seven parts.
+
+### 1. Database and session
+
+<Source file="Project/fitness_center/config.php" from={1} to={12} />
+
+| Line(s) | What | Concept |
+| --- | --- | --- |
+| 3–7 | One PDO connection for the whole request | [PHP + MySQL](/wiki/php-mysql#connecting-with-pdo) |
+| 7 | A `shortcut:` comment marks a known limitation (root without password) | honest code |
+| 8 | Session cookie is `HttpOnly` and `SameSite=Strict` | [Web security](/wiki/web-security#secure-sessions) |
+| 9 | `session_start()` once, before any output | [Sessions](/wiki/sessions-login) |
+| 10 | Load the TOTP functions; `__DIR__` makes the path independent of the caller | [Includes](/wiki/php-functions#splitting-code-into-files) |
+| 12 | `ISSUER` is the name shown in Google Authenticator | constants |
+
+### 2. Tiny helpers and guards
+
+<Source file="Project/fitness_center/config.php" from={14} to={25} />
+
+- `h()` escapes for HTML. It is used on **every** printed value.
+- `go()` redirects **and** exits, so a forgotten `exit` is impossible.
+- `me()` returns the logged-in user array or `null`.
+- `require_login()` / `require_admin()` are the page guards.
+- `finish_login()` is the **only** place where a full login is created: new session ID, `$_SESSION` replaced with just the `user` key (which also throws away the `pre` key), redirect.
+
+### 3. The page frame
+
+`page_head($title)` prints the whole top of the page: `<head>` with Bootstrap, fonts and `style.css`, and the navbar. The navbar links depend on who is logged in:
+
+<Source file="Project/fitness_center/config.php" from={27} to={35} />
+
+Line 35 adds `?v=<file modification time>` to the stylesheet URL. Every time `style.css` changes, the URL changes, so browsers cannot keep using an old cached copy. `page_foot()` closes `main`, prints the footer and loads `bootstrap.bundle.min.js` and `site.js`.
+
+### 4. Auth page helpers
+
+<Source file="Project/fitness_center/config.php" from={69} to={76} />
+
+`auth_start()` and `auth_end()` print the centred card used by login, register, setup, verify and logout, so those five pages only contain their form. `alert()` prints a Bootstrap alert only when there is a message.
+
+### 5. Lockout
+
+<Source file="Project/fitness_center/config.php" from={78} to={93} />
+
+- `is_locked()` lets MySQL compare `locked_until > NOW()`, so PHP and the database never disagree about the time.
+- `register_fail()` increments the counter. In MySQL, the `SET` assignments run left to right and later ones see the new value: after `failed_count + 1`, the `IF(failed_count >= 5, …)` checks the **incremented** count. On the 5th failure it sets `locked_until` 15 minutes ahead and resets the counter to 0.
+- `bad()` picks the message: the lock message if the account is now locked, otherwise the normal one.
+
+### 6. Checking a code
+
+<Source file="Project/fitness_center/config.php" from={95} to={107} />
+
+One function used by three pages. `$enabledOnly = false` is needed during setup, because the secret exists but is not enabled yet. A right code resets the failure counter; a wrong one counts.
+
+## register.php
+
+<Source file="Project/fitness_center/register.php" from={1} to={20} />
+
+Concepts: [form handling](/wiki/php-forms), [validation](/wiki/php-forms#validation-is-the-input-acceptable), [ternary](/wiki/php-control-flow#ternary-operator), [password hashing](/wiki/passwords-2fa), [try/catch with a UNIQUE key](/wiki/php-mysql#handling-errors), [PRG redirect](/wiki/php-forms#redirects-and-postredirectget).
+
+The role decision on line 11 counts existing users: 0 means this is the first account, so it becomes `admin`.
+
+## login.php
+
+<Source file="Project/fitness_center/login.php" from={1} to={17} />
+
+Read it as three outcomes:
+
+1. **Locked** (line 8): say so, even if the password is right. Otherwise an attacker could keep guessing.
+2. **Correct password** (lines 9–14): new session ID, store `pre` (not `user`!), then go to `verify_2fa.php` if 2FA is already enabled, or `setup_2fa.php` if not.
+3. **Wrong** (line 16): count the failure if the email exists; show the same message whether or not the email exists.
+
+## setup_2fa.php
+
+<Source file="Project/fitness_center/setup_2fa.php" from={1} to={23} />
+
+- Lines 3–4: only reachable in the `pre` state.
+- Lines 6–13: reuse an existing (not yet confirmed) secret or create one. Reusing matters: if the user reloads the page, the QR code must not change after they already scanned it.
+- Lines 16–21: the first correct code enables 2FA and completes the login.
+- Line 23: build the `otpauth://` URI for the QR code.
+
+The QR code is drawn in the browser. `json_encode` safely puts the PHP string into JavaScript:
+
+<Source file="Project/fitness_center/setup_2fa.php" from={37} to={38} lang="html" />
+
+## verify_2fa.php
+
+<Source file="Project/fitness_center/verify_2fa.php" from={1} to={9} />
+
+The shortest page: in the `pre` state, check the code, and either finish the login or show an error.
+
+## dashboard.php
+
+<Source file="Project/fitness_center/dashboard.php" from={1} to={5} />
+
+`require_login()` is the guard. `$admin` decides whether to show the admin card.
+
+## logout.php
+
+<Source file="Project/fitness_center/logout.php" from={1} to={14} />
+
+A POST with a valid code empties the session, destroys it, deletes the cookie and redirects. A wrong code keeps the user logged in and counts as a failure.
+
+## admin.php
+
+The biggest file (about 140 lines). It has three parts: **handle actions**, **load data**, **render the chosen tab**.
+
+### Setup and tabs
+
+<Source file="Project/fitness_center/admin.php" from={1} to={8} />
+
+`$tabs` is both the menu definition and an [allow-list](/wiki/php-arrays#using-an-array-as-a-lookup-table) for `$_GET['t']`.
+
+### Handling actions
+
+<Source file="Project/fitness_center/admin.php" from={10} to={36} />
+
+- Every form on the page sends a hidden `do` field naming the action; the [`switch`](/wiki/php-control-flow#switch) picks the code to run.
+- IDs are converted with `(int)`; every query is prepared.
+- An admin cannot delete themselves (line 16): otherwise the last admin could lock everyone out.
+- `save_member` handles both **create** and **update**: if the form carried an `id`, update, otherwise insert.
+- A foreign key failure (deleting a plan that members use) is caught and shown as "Cannot delete: it is still in use."
+- On success, redirect back to the same tab (Post/Redirect/Get).
+
+### A reusable delete button
+
+<Source file="Project/fitness_center/admin.php" from={38} to={41} />
+
+Deletes always go through a POST form with a confirmation dialog, never a link. One function produces the button for all four tables.
+
+### Stats
+
+<Source file="Project/fitness_center/admin.php" from={42} to={43} />
+
+An arrow function counts rows. `$tbl` is inserted into the SQL directly, which is only safe because it is always one of four fixed strings written in the code, never user input. The comment says so, which is the habit to copy.
+
+### The users tab
+
+<Source file="Project/fitness_center/admin.php" from={59} to={70} />
+
+A [`LEFT JOIN`](/wiki/databases-sql#combining-tables-join) brings in the 2FA status, a `foreach` prints rows, a ternary chooses badge colours, and every value goes through `h()`. Your own row shows "(you)" instead of a delete button.
+
+### The members tab: an edit form that is also an add form
+
+When the URL has `&edit=5`, the form is pre-filled from that row; otherwise it starts empty. The same form and the same `save_member` action handle both cases.
+
+<Source file="Project/fitness_center/admin.php" from={86} to={93} />
+
+`$s->fetch() ?: $edit` falls back to the empty defaults if the ID does not exist.
+
+## Concepts map
+
+| Concept | Where in the project |
+| --- | --- |
+| Variables, strings, constants | everywhere; `ISSUER`, `MAX_FAILS` |
+| if / elseif / else, ternary, `??` | `register.php`, `login.php`, templates |
+| switch | `admin.php` action handling |
+| foreach, alternative syntax | templates in `index.php`, `admin.php` |
+| Arrays, destructuring | `$tabs`, `$programs`, `[$label, $n, $ic, $grad]` |
+| Functions, scope, `global` | `config.php` |
+| include / require | first line of every page |
+| Forms, `$_POST`, `$_GET` | all pages |
+| Validation, escaping | `register.php`, `index.php`, `h()` |
+| PDO, prepared statements, JOIN | `config.php`, `admin.php`, `login.php` |
+| Sessions, regenerate ID, logout | `config.php`, `login.php`, `logout.php` |
+| Hashing, TOTP, lockout | `register.php`, `login.php`, `totp.php`, `config.php` |
+
+<Exercise title="Add a 'notes' column to plans">
+Plans should have a short description (e.g. "No contract, cancel monthly") shown on the home page cards and editable in the admin. List every change, then implement them.
+
+<Solution>
+1. **Database:** `ALTER TABLE plans ADD description VARCHAR(150) NOT NULL DEFAULT '';` and add the column to `install.sql` for new installs.
+2. **admin.php, form:** add `<input name="description" class="form-control" maxlength="150">` to the "Add plan" form.
+3. **admin.php, action:** in `case 'save_plan'`, insert it: `INSERT INTO plans (name, price_eur, description) VALUES (?,?,?)` with `trim($p['description'] ?? '')`.
+4. **admin.php, table:** add a `<th>Description</th>` and `<td><?= h($r['description']) ?></td>`.
+5. **index.php, query:** `SELECT name, price_eur, description FROM plans ORDER BY price_eur`.
+6. **index.php, card:** print `<p class="text-muted"><?= h($p['description']) ?></p>` under the price.
+
+Six touch points for one column: database, form, processing, admin display, public query, public display. Listing them first is the habit that prevents half-finished features.
+</Solution>
+</Exercise>

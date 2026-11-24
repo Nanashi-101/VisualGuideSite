@@ -1,0 +1,252 @@
+<Goals>
+- Connecting PHP to MySQL with **mysqli** (as in the course) and with **PDO** (as in the GoogleAuth starter and the fitness site)
+- Running queries and fetching rows: `fetch_assoc`, `fetch`, `fetchAll`, `fetchColumn`
+- Building HTML tables from query results
+- What SQL injection is, seeing it happen, and how prepared statements prevent it
+- Handling database errors without leaking information
+- A complete CRUD page, end to end
+</Goals>
+
+## Two ways to talk to MySQL
+
+PHP has two extensions for MySQL. You will see both in the course.
+
+| | mysqli | PDO |
+| --- | --- | --- |
+| Works with | MySQL / MariaDB only | MySQL, PostgreSQL, SQLite and more |
+| Styles | procedural (`mysqli_query($conn, …)`) and object (`$conn->query(…)`) | object only (`$pdo->query(…)`) |
+| Prepared statements | yes, more verbose | yes, simple |
+| Used by | SMW project, Week 2 exercises | GoogleAuth starter, fitness site |
+
+Both are good. Learn mysqli because the professor's code uses it, and prefer PDO for new code because prepared statements are shorter.
+
+## Connecting with mysqli
+
+<Source file="Learning/Procedural_PhP_week2/Connection_MySQL.php" />
+
+`mysqli_connect(host, user, password, database)` returns a connection object, or `false` on failure. `die()` prints a message and stops. In XAMPP the user is `root` with an empty password.
+
+The SMW project puts this in `config.php` once and includes it everywhere:
+
+<Source file="Learning/SMW_AdminModule/config.php" />
+
+## Reading rows with mysqli
+
+```php
+$result = mysqli_query($conn, 'SELECT * FROM users');
+
+while ($row = mysqli_fetch_assoc($result)) {
+    echo $row['username'] . ' – ' . $row['email'] . '<br>';
+}
+echo mysqli_num_rows($result) . ' users';
+```
+
+- `mysqli_query` sends the SQL and returns a **result set** (or `false` on an SQL error).
+- `mysqli_fetch_assoc` returns the **next row** as an associative array, keyed by column name, or `null` when there are no more rows.
+- `mysqli_num_rows` counts the rows in the result.
+
+<Note>
+`mysqli_fetch_array` (used in some SMW files) returns each value **twice**, under its column name *and* its number (`$row['SName']` and `$row[1]`). `fetch_assoc` is clearer.
+</Note>
+
+## Connecting with PDO
+
+The fitness site creates one PDO connection in `config.php`:
+
+<Source file="Project/fitness_center/config.php" from={3} to={7} />
+
+| Option | Why |
+| --- | --- |
+| `charset=utf8mb4` in the DSN | ä, ö, ü, € and emoji survive the round trip |
+| `ERRMODE_EXCEPTION` | SQL errors throw exceptions you can `catch`, instead of failing silently |
+| `FETCH_ASSOC` | Rows come back as `['email' => …]` arrays by default |
+| `EMULATE_PREPARES => false` | Real server-side prepared statements; numbers come back as numbers |
+
+## Reading rows with PDO
+
+```php
+$plans = $pdo->query('SELECT name, price_eur FROM plans ORDER BY price_eur')->fetchAll();  // all rows
+$count = $pdo->query('SELECT COUNT(*) FROM users')->fetchColumn();                         // one value
+
+$s = $pdo->prepare('SELECT * FROM members WHERE id = ?');
+$s->execute([$id]);
+$member = $s->fetch();         // one row, or false if not found
+```
+
+| Method | Returns | Use when |
+| --- | --- | --- |
+| `fetch()` | the next row, or `false` | you expect one row (login, edit form) |
+| `fetchAll()` | an array of all rows | listing (tables, cards) |
+| `fetchColumn()` | the first column of the next row | `COUNT(*)`, a single value |
+
+## From rows to an HTML table
+
+This pattern appears in every admin page:
+
+```php
+<?php $rows = $pdo->query('SELECT * FROM contacts ORDER BY id DESC')->fetchAll(); ?>
+<table class="table">
+  <thead><tr><th>Date</th><th>Email</th><th>Subject</th></tr></thead>
+  <?php foreach ($rows as $r): ?>
+    <tr>
+      <td><?= h($r['created_at']) ?></td>
+      <td><?= h($r['email']) ?></td>
+      <td><?= h($r['subject']) ?></td>
+    </tr>
+  <?php endforeach; ?>
+</table>
+```
+
+Header once, a loop for the rows, every value escaped with `h()`.
+
+## SQL injection
+
+Now the most important lesson in this article. Look at how the Week 3 login builds its query:
+
+<Source file="Learning/Week3_Login/Login/login.php" from={15} to={21} />
+
+The user's input is **glued directly into the SQL text**. That means the user is not only giving data; they can write SQL. Try it:
+
+<InjectionDemo />
+
+With the username `' OR '1'='1` the query becomes:
+
+```sql
+SELECT uid FROM users WHERE username='' OR '1'='1' and password='anything'
+```
+
+`AND` binds tighter than `OR`, so the condition reads `username = ''` **OR** `('1'='1' AND password='anything')`. Depending on the input, an attacker can log in without a password, read every table, or delete data with `'; DROP TABLE users; --`. This is **SQL injection**, one of the most common and damaging attacks on the web.
+
+<Mochi>
+Gluing input into SQL is like letting a customer write their own order directly on the cook's ticket. Most write "1 pizza". One writes "1 pizza, and also give me the cash register". The cook just reads the ticket and obeys.
+</Mochi>
+
+### The fix: prepared statements
+
+A **prepared statement** sends the SQL and the data **separately**. The SQL contains placeholders (`?`), and the values are sent afterwards. The database already knows the structure of the query, so the values can never change it: `' OR '1'='1` is simply searched for as a strange username and found nowhere.
+
+With PDO:
+
+```php
+$s = $pdo->prepare('SELECT id, email, role, password_hash FROM users WHERE email = ?');
+$s->execute([$email]);
+$u = $s->fetch();
+```
+
+With named placeholders (easier to read with many values):
+
+```php
+$s = $pdo->prepare('INSERT INTO members (first_name, last_name, plan_id) VALUES (:first, :last, :plan)');
+$s->execute(['first' => $first, 'last' => $last, 'plan' => $planId]);
+```
+
+With mysqli (more steps, same idea), as in the course's improved registration example:
+
+```php
+$stmt = mysqli_prepare($conn, 'INSERT INTO users (username, password, email) VALUES (?, ?, ?)');
+mysqli_stmt_bind_param($stmt, 'sss', $uname, $hashedPassword, $email);   // s = string, i = int, d = float
+mysqli_stmt_execute($stmt);
+```
+
+<Warning title="What prepared statements cannot do">
+Placeholders work for **values** only, not for table names, column names or `ORDER BY` directions. If those must vary, choose them from a fixed allow-list in PHP (as the fitness admin does with `$tabs`), never from raw input. And `mysqli_real_escape_string`, used in some course files, is an older defence that is easy to get wrong (for example on numbers without quotes). Prefer prepared statements everywhere user input touches SQL.
+</Warning>
+
+## Handling errors
+
+With `ERRMODE_EXCEPTION`, a failing query throws a `PDOException`. Catch it where you can do something useful:
+
+```php
+try {
+    $pdo->prepare('INSERT INTO users (email, password_hash, role) VALUES (?,?,?)')
+        ->execute([$email, password_hash($pass, PASSWORD_DEFAULT), $role]);
+    go('login.php?registered=1');
+} catch (PDOException $e) {
+    $msg = $e->getCode() == 23000 ? 'This email is already registered.' : 'Registration failed.';
+}
+```
+
+`23000` is the SQL standard code for "integrity constraint violation" (a duplicate `UNIQUE` value or a broken foreign key). Notice the user only sees a friendly message. Printing `$e->getMessage()` on a public page would reveal table names and SQL to an attacker, which is why the fitness site never does.
+
+## A full CRUD round, PDO style
+
+The fitness admin's member management, condensed:
+
+```php
+// CREATE or UPDATE (one form, the hidden id decides)
+$v = [$first, $last, $birthdate ?: null, $address, $notes, (int)$planId];
+if ($id) $pdo->prepare('UPDATE members SET first_name=?, last_name=?, birthdate=?, address=?, notes=?, plan_id=? WHERE id=?')
+             ->execute([...$v, $id]);
+else     $pdo->prepare('INSERT INTO members (first_name, last_name, birthdate, address, notes, plan_id) VALUES (?,?,?,?,?,?)')
+             ->execute($v);
+
+// READ one, to fill the edit form
+$s = $pdo->prepare('SELECT * FROM members WHERE id = ?');
+$s->execute([(int)$_GET['edit']]);
+$edit = $s->fetch();
+
+// READ all, joined with plans
+$rows = $pdo->query('SELECT m.*, p.name AS plan FROM members m JOIN plans p ON p.id = m.plan_id ORDER BY m.last_name')->fetchAll();
+
+// DELETE (sent from a small POST form, never a GET link)
+$pdo->prepare('DELETE FROM members WHERE id = ?')->execute([$id]);
+```
+
+`[...$v, $id]` is the **spread operator**: it copies all values of `$v` into a new array and adds `$id` at the end, matching the seven `?` of the `UPDATE`. `$birthdate ?: null` stores `NULL` instead of an empty string when no date was entered.
+
+<Exercise title="Rewrite the professor's login safely">
+Rewrite `Week3_Login/Login/login.php` so it uses PDO with a prepared statement. Assume the passwords are still stored in plain text for now (hashing comes in the next section). Keep the same behaviour: on success store the username in the session and redirect to `home.php`.
+
+<Solution>
+```php:login.php
+<?php
+session_start();
+$pdo = new PDO('mysql:host=127.0.0.1;dbname=smw;charset=utf8mb4', 'root', '', [
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+]);
+
+$error = '';
+if (isset($_POST['Submit'])) {
+    $username = trim($_POST['username'] ?? '');
+    $password = $_POST['password'] ?? '';
+    if ($username === '' || $password === '') {
+        $error = 'Both fields are required.';
+    } else {
+        $s = $pdo->prepare('SELECT uid FROM users WHERE username = ? AND password = ?');
+        $s->execute([$username, $password]);
+        if ($s->fetch()) {
+            session_regenerate_id(true);
+            $_SESSION['username'] = $username;
+            header('Location: home.php');
+            exit;
+        }
+        $error = 'Incorrect username or password.';
+    }
+}
+```
+The SQL text never contains user input; both values travel as parameters. `session_regenerate_id(true)` gives the logged-in user a fresh session ID (explained in [Sessions & login](/wiki/sessions-login)), and `exit` after the redirect is added because the original forgot it.
+</Solution>
+</Exercise>
+
+<Exercise title="Search members">
+Add a search box to a members page: a GET form with a field `q`. Show members whose first or last name contains the text, using a prepared statement with `LIKE`.
+
+<Solution>
+```php
+<?php
+$q = trim($_GET['q'] ?? '');
+$s = $pdo->prepare('SELECT * FROM members WHERE first_name LIKE ? OR last_name LIKE ? ORDER BY last_name');
+$like = '%' . $q . '%';
+$s->execute([$like, $like]);
+$rows = $s->fetchAll();
+?>
+<form method="get">
+  <input name="q" value="<?= h($q) ?>" placeholder="Search name">
+  <button>Search</button>
+</form>
+<p><?= count($rows) ?> result(s)</p>
+```
+The `%` wildcards are added to the **value** in PHP, not written into the SQL around the placeholder. A GET form is right here: searching only reads data, and the URL `?q=schmidt` can be bookmarked.
+</Solution>
+</Exercise>

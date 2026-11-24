@@ -1,0 +1,231 @@
+<Goals>
+- How PHP is mixed into HTML with `<?php ... ?>`
+- Printing output with `echo`, `print` and the short `<?= ?>` tag
+- Comments and why you should write them
+- Variables, naming rules and assignment
+- The data types: string, int, float, bool, null, array, and how to inspect them with `var_dump`
+- Strings in depth: single vs double quotes, concatenation, escaping, useful functions
+- Constants and type juggling (PHP converting types for you)
+</Goals>
+
+## PHP lives inside HTML
+
+A `.php` file is mostly HTML with **PHP islands** in it. Everything outside `<?php ... ?>` is sent to the browser unchanged; everything inside is run on the server.
+
+```php:greeting.php
+<!DOCTYPE html>
+<html>
+<body>
+  <h1>Kraftwerk Fitness</h1>
+  <?php
+    $hour = (int) date('H');          // current hour, 0–23
+    echo "<p>It is $hour o'clock.</p>";
+  ?>
+  <p>This line is plain HTML.</p>
+</body>
+</html>
+```
+
+Rules worth knowing early:
+
+- Every **statement ends with a semicolon** `;`. A missing semicolon is the most common syntax error ("unexpected ..." on the *next* line).
+- A file that contains **only PHP** (like `config.php`) should start with `<?php` and **leave out the closing** `?>`. Stray spaces after a closing tag get sent as output and can break `header()` redirects.
+- PHP keywords and function names are not case-sensitive (`ECHO` works), but **variable names are**: `$Name` and `$name` are different.
+
+## Printing output
+
+| Way | Example | Notes |
+| --- | --- | --- |
+| `echo` | `echo "Hi", " there";` | The usual choice. Can take several values separated by commas. |
+| `print` | `print "Hi";` | Like `echo` with one value. Returns 1, so it can be used in expressions. Rarely needed. |
+| `<?= ... ?>` | `<p><?= $name ?></p>` | Short for `<?php echo ... ?>`. Perfect inside HTML templates. |
+| `print_r` | `print_r($array);` | Prints arrays readably. For debugging. |
+| `var_dump` | `var_dump($x);` | Prints type **and** value. The best debugging tool. |
+
+The Week 1 exercise uses `print` and the `.` operator to join text:
+
+<Source file="Exercises/Week1_HTMLFormsPhP_LNH/PhPPrint.php" from={5} to={14} />
+
+The fitness site prints values inside HTML with the short tag almost everywhere, because it keeps templates readable:
+
+```php
+<h2 class="fw-bold">Hello, <?= h(me()['email']) ?></h2>
+```
+
+## Comments
+
+<Source file="Exercises/Week1_HTMLFormsPhP_LNH/PhPComments.php" />
+
+Use comments to explain **why**, not what. `$i++; // add one to i` helps nobody. `// The first account becomes the admin` explains a decision someone would otherwise wonder about. PHP comments, unlike HTML comments, never reach the browser.
+
+## Variables
+
+A variable is a named box that holds a value.
+
+```php
+$firstName = "Anna";      // a string
+$age       = 23;          // an integer
+$price     = 24.90;       // a float (decimal number)
+$isAdmin   = false;       // a boolean
+$age       = $age + 1;    // read the old value, store the new one: 24
+```
+
+- Every variable starts with `$`.
+- The name must start with a letter or underscore, then letters, digits or underscores. `$2fa` is invalid, `$twoFa` and `$two_fa` are fine.
+- You do not declare a type. The variable takes the type of whatever you put in, and can change later.
+- `=` means **assign** (put the right side into the left). Comparing uses `==` or `===` (next article).
+
+<Mochi>
+A variable is a labelled jar. `$age = 23;` puts 23 in the jar labelled "age". Writing `$age` later means "look in that jar". If you look into a jar that was never filled, PHP warns you: *Undefined variable*.
+</Mochi>
+
+## Data types
+
+| Type | Example | Used for |
+| --- | --- | --- |
+| `string` | `"Anna"`, `'Premium'` | Text: names, emails, HTML |
+| `int` | `42`, `-3`, `0` | Whole numbers: IDs, counts, ages |
+| `float` | `24.90`, `3.14` | Decimal numbers: prices, grades |
+| `bool` | `true`, `false` | Yes/no: is logged in, is admin |
+| `array` | `['Basic', 'Premium']` | Lists and records: one database row |
+| `null` | `null` | "No value": an empty birthdate |
+| `object` | `$pdo` | A bundle of data and functions, e.g. a database connection |
+
+Use `var_dump()` to see both the type and value. The course's data-type exercise does exactly that:
+
+<Source file="Exercises/Week1_HTMLFormsPhP_LNH/PhPDatatypes.php" from={5} to={8} />
+
+```php
+var_dump("5985");   // string(4) "5985"
+var_dump(5985);     // int(5985)
+var_dump(24.9);     // float(24.9)
+var_dump(true);     // bool(true)
+var_dump(null);     // NULL
+var_dump(['a', 'b']);
+// array(2) { [0]=> string(1) "a" [1]=> string(1) "b" }
+```
+
+<Note title="Form data is always a string">
+Everything that arrives from a form (`$_POST`, `$_GET`) is a **string**, even from `<input type="number">`. `"5"` is not `5`. When you need a number, convert it: `(int) $_POST['id']` or `(float) $_POST['price']`. The fitness admin does `(int)($p['id'] ?? 0)` before using an ID.
+</Note>
+
+## Strings in depth
+
+### Single vs double quotes
+
+```php
+$name = "Ishika";
+echo "Hello, $name!";    // Hello, Ishika!   (double quotes insert variables)
+echo 'Hello, $name!';    // Hello, $name!    (single quotes print exactly what you wrote)
+echo "Price: {$plan['price']} €";  // curly braces for array items inside double quotes
+```
+
+Use single quotes for fixed text (SQL, array keys), double quotes when you want variables inserted.
+
+### Joining strings (concatenation)
+
+The `.` operator joins strings. `.=` appends to an existing string.
+
+```php
+$full = $first . ' ' . $last;          // "Anna Schmidt"
+$html  = '<ul>';
+$html .= '<li>Basic</li>';
+$html .= '</ul>';                       // builds up HTML step by step
+```
+
+<Warning>
+In PHP, `+` is **only** for numbers. `"Anna" + "Schmidt"` does not join text; it throws an error. JavaScript uses `+` for both, which is why this trips people up.
+</Warning>
+
+### Escaping
+
+Inside double quotes, `\"` is a quote character, `\n` a new line, `\t` a tab, `\$` a dollar sign. Inside single quotes only `\'` and `\\` are special. When a string contains HTML with double-quoted attributes, single quotes around the whole string save you from escaping:
+
+```php
+echo '<a href="login.php" class="btn">Login</a>';
+```
+
+### String functions you will use
+
+| Function | Does | Example → result |
+| --- | --- | --- |
+| `strlen($s)` | Length in bytes | `strlen("secret12")` → `8` |
+| `trim($s)` | Removes spaces at both ends | `trim("  anna ")` → `"anna"` |
+| `strtolower` / `strtoupper` | Changes case | `strtoupper("plan")` → `"PLAN"` |
+| `ucfirst($s)` | First letter uppercase | `ucfirst("anna")` → `"Anna"` |
+| `str_replace($a, $b, $s)` | Replace text | `str_replace("-", "", "12-34")` → `"1234"` |
+| `str_contains($s, $part)` | Is it inside? | `str_contains("a@b.de", "@")` → `true` |
+| `substr($s, $start, $len)` | Part of a string | `substr("Kraftwerk", 0, 5)` → `"Kraft"` |
+| `str_pad($s, $len, $c, STR_PAD_LEFT)` | Pad to a length | `str_pad("42", 6, "0", STR_PAD_LEFT)` → `"000042"` |
+| `number_format($n, 2, ',', '.')` | Format numbers | `number_format(1500.5, 2, ',', '.')` → `"1.500,50"` |
+| `htmlspecialchars($s)` | Make text safe to print in HTML | `<b>` → `&lt;b&gt;` |
+
+`str_pad` is exactly how the professor's `totp.php` makes sure a code like `42891` becomes `042891`. `number_format` with `','` and `'.'` gives German-style prices on the fitness home page.
+
+## Constants
+
+A constant is a value that never changes. It has no `$` and is usually written in capitals.
+
+```php
+const ISSUER = 'Kraftwerk Fitness';    // used as the app name in Google Authenticator
+const MAX_FAILS = 5, LOCK_MINUTES = 15;
+echo ISSUER;
+```
+
+These three lines come straight from the fitness site's `config.php`. Putting "magic numbers" in named constants means that changing the lockout from 15 to 30 minutes is a one-line change.
+
+## Type juggling
+
+PHP converts types automatically when it thinks it should. That is convenient and occasionally surprising:
+
+```php
+echo "5" + 3;        // 8   (the string "5" became a number)
+echo "5" . 3;        // "53" (the number 3 became a string)
+var_dump("10" < "9");      // false: both look numeric, so compared as numbers
+var_dump(0 == "a");        // false in PHP 8 (true in old PHP 7!)
+```
+
+The professor's Week 2 example compares the hour to the *string* `"10"`:
+
+<Source file="Learning/SimpleExcercises_week2/13.IfElseElse.php" from={6} to={16} />
+
+It works because both sides look numeric, so PHP compares them as numbers. Writing `$t < 10` (a real number) says what you mean more clearly. The safest habit: **convert input to the type you need, then compare with `===`**, which checks type and value. More in the next article.
+
+<Exercise title="Membership card">
+Store a member's first name, last name, birth year, plan name and monthly price in variables. Print a sentence like: *Anna Schmidt (age 31) has the Premium plan for 39,90 € per month, 478,80 € per year.* Calculate the age from the current year (`date('Y')`) and the yearly price, and format the prices German-style.
+
+<Solution>
+```php:card.php
+<?php
+$first = 'Anna';
+$last = 'Schmidt';
+$birthYear = 1995;
+$plan = 'Premium';
+$price = 39.90;
+
+$age = (int) date('Y') - $birthYear;
+$yearly = $price * 12;
+
+echo "$first $last (age $age) has the $plan plan for "
+   . number_format($price, 2, ',', '.') . " € per month, "
+   . number_format($yearly, 2, ',', '.') . " € per year.";
+```
+`date('Y')` returns a **string** like `"2026"`; the `(int)` makes the subtraction clearly numeric. Concatenation with `.` lets you mix variables inside double quotes with function results outside them.
+</Solution>
+</Exercise>
+
+<Exercise title="Predict the output">
+Without running it, write down what each line prints. Then run it and compare.
+```php
+$a = "7"; $b = 3;
+echo $a + $b, "<br>";
+echo $a . $b, "<br>";
+echo 'Total: $a', "<br>";
+echo "Total: $a", "<br>";
+var_dump($a == 7, $a === 7);
+```
+
+<Solution>
+`10` (numeric addition), `73` (string joining), `Total: $a` (single quotes do not insert variables), `Total: 7`, then `bool(true) bool(false)`: `==` only compares the value after conversion, while `===` also requires the same type, and `"7"` is a string, not an int.
+</Solution>
+</Exercise>

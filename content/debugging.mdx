@@ -1,0 +1,157 @@
+<Goals>
+- How to read PHP error messages and find the real cause
+- The most common errors and what they mean
+- Inspecting variables with `var_dump`, `print_r` and the Network tab
+- Debugging SQL with phpMyAdmin
+- Debugging sessions, forms and redirects
+- A simple, repeatable debugging routine
+</Goals>
+
+## The debugging mindset
+
+A bug is a difference between what you **expect** and what **happens**. Debugging is finding the exact line where the two first differ. Guessing and changing random things wastes time; **looking** at the values is almost always faster.
+
+The routine:
+
+1. **Reproduce** it reliably. What exact steps cause it?
+2. **Read** the full error message: type, text, file, line.
+3. **Inspect** the values just before the problem (`var_dump`).
+4. **Narrow** down: is the data wrong (form, database) or the logic (condition, loop)?
+5. **Fix one thing**, test again.
+6. **Understand** why it happened, so you recognise it next time.
+
+## Make errors visible
+
+During development you want to see every error:
+
+```php
+<?php
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+```
+
+If a page is completely blank, open the Apache error log: XAMPP Control Panel → Apache → **Logs** → `error.log`. The last lines show what went wrong.
+
+## Reading an error message
+
+```text
+Warning: Undefined array key "email" in C:\xampp\htdocs\kraft\register.php on line 5
+└─┬───┘  └──────────────┬─────────┘    └──────────────┬──────────────────┘ └───┬───┘
+severity        what happened                    which file                which line
+```
+
+| Severity | Meaning |
+| --- | --- |
+| **Parse error** | The code is not valid PHP. Nothing runs. Often a missing `;`, `)` or `}` on the line **before** the one reported. |
+| **Fatal error** | PHP had to stop (function does not exist, required file missing, uncaught exception). |
+| **Warning** | Something is wrong but PHP continues (missing array key, failed include). Fix it anyway: it usually causes a later problem. |
+| **Deprecated** | Works now, will break in a future PHP version. |
+
+## The errors you will meet most
+
+| Message | Usual cause | Fix |
+| --- | --- | --- |
+| `syntax error, unexpected …` | Missing `;`, unclosed quote or bracket | Look at the line **before**; VS Code's red underline helps |
+| `Undefined variable $x` | Typo, or variable set inside an `if` that did not run, or inside a function | Check spelling; set a default; pass it as a parameter |
+| `Undefined array key "email"` | The form field was not sent (missing `name`, wrong method, checkbox unticked) | `$_POST['email'] ?? ''`; check the form's `name` and `method` |
+| `Call to undefined function h()` | The file defining it was not included | `require 'config.php';` at the top |
+| `Cannot modify header information – headers already sent by (output started at X:Y)` | Output (echo, HTML, a space, a BOM) before `header()` or `session_start()` | Remove the output at file X line Y; move PHP processing to the very top |
+| `Access denied for user 'root'@'localhost'` | Wrong DB password | XAMPP default is an empty string `''` |
+| `Unknown database 'kraft'` | Database not created/imported | Run `install.sql` |
+| `SQLSTATE[42S02]: Base table or view not found` | Table name typo or table missing | Check the name in phpMyAdmin (case matters on Linux servers) |
+| `SQLSTATE[42S22]: Column not found` | Column name typo in SQL | Compare with the table structure |
+| `SQLSTATE[23000]: Integrity constraint violation` | Duplicate `UNIQUE` value, or foreign key violation | Expected sometimes; catch and show a friendly message |
+| `SQLSTATE[HY093]: Invalid parameter number` | Number of `?` differs from the number of values in `execute([...])` | Count both |
+| `Maximum execution time of 120 seconds exceeded` | Infinite loop | Check the loop's step and condition |
+
+## Look at the values
+
+```php
+var_dump($_POST);                    // what did the form actually send?
+var_dump($_SESSION);                 // am I logged in? which keys exist?
+echo '<pre>'; print_r($rows); echo '</pre>';   // what did the query return?
+var_dump($u);                        // false means: no user found
+exit;                                // stop here to see the output before a redirect hides it
+```
+
+The `exit` trick matters: if code redirects right after your `var_dump`, you will never see the output. Stop the script first.
+
+<Mochi>
+`var_dump` is a torch. Most bugs live in a dark room where you *assumed* a variable contained something. Shine the torch and look before you start moving furniture.
+</Mochi>
+
+## Use the browser's developer tools
+
+Press <kbd>F12</kbd>.
+
+| Tab | Use it for |
+| --- | --- |
+| **Network** | Did the form send a POST? What fields (Payload)? What status (200, 302, 403, 500)? Where did the redirect go? |
+| **Application → Cookies** | Is `PHPSESSID` set? Does it change after login? |
+| **Elements** | Is the `name` attribute right? Is the HTML what PHP was supposed to produce? |
+| **Console** | JavaScript errors (QR code not drawing, animations broken) |
+| Device toolbar (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>) | Test phone and tablet layouts |
+
+<Tip>
+In the Network tab tick **Preserve log**. Otherwise a redirect clears the list and you lose the POST request you wanted to inspect.
+</Tip>
+
+## Debugging SQL
+
+When a query returns nothing or fails:
+
+1. Print the SQL **and** the values: `var_dump($sql, $params);`
+2. Paste the SQL into phpMyAdmin's **SQL** tab with the values filled in by hand.
+3. If it fails there too, the problem is the SQL (typo, wrong column, wrong join). If it works there, the problem is in PHP (wrong values, wrong variable, not executed).
+4. Check the **data**: maybe the row really does not exist, or has trailing spaces, or a different case.
+
+## Debugging sessions and logins
+
+| Symptom | Check |
+| --- | --- |
+| Logged out on every page | Is `session_start()` called on every page (via `config.php`)? Any output before it? |
+| Login "works" but the dashboard sends you back | Does the login store the same key the guard checks (`user` vs `pre` vs `username`)? |
+| 2FA codes always wrong | Is the laptop clock correct (Windows → Date & time → Sync now)? Is the same secret in the app and the DB? |
+| Locked out while testing | `UPDATE users SET locked_until = NULL, failed_count = 0;` |
+| A protected page shows content when using curl | Missing `exit` after `header('Location: …')` |
+
+## Testing your work
+
+Manual testing is fine for course projects if it is **systematic**. Keep a test list (like the one in [Build it yourself](/wiki/build-it-yourself#milestone-13-test-like-a-reviewer)) and run it after every bigger change. For each feature test:
+
+- the **happy path** (correct input),
+- **wrong input** (empty, too long, wrong type, malicious),
+- **wrong user** (logged out, member instead of admin),
+- **repeats** (reload, double click, back button).
+
+You can also test from the command line with **curl**, which shows the raw responses without a browser:
+
+```powershell
+curl.exe -i http://localhost/fitness_center/admin.php
+```
+
+`-i` shows the headers. A correctly protected page answers `302 Found` with `Location: login.php` and **no page content** after the headers.
+
+<Exercise title="Find the bugs">
+This page should list plans cheaper than the number in `?max=30`. It has four bugs. Find them without running it, then run it to confirm.
+```php
+<?php
+require 'config.php'
+$max = $_GET['max'];
+$s = $pdo->prepare('SELECT name, price FROM plans WHERE price_eur < ?');
+$s->execute($max);
+foreach ($s->fetchAll() as $p) {
+    echo $p['name'] . ': ' . $p['price_eur'] . '<br>'
+}
+```
+
+<Solution>
+1. Line 2: missing `;` after `require 'config.php'` → parse error.
+2. Line 3: `$_GET['max']` without a default → warning when `?max` is missing. Use `(float)($_GET['max'] ?? 30)`.
+3. Line 4: the column is `price_eur`, not `price`, in the `SELECT` → "Column not found".
+4. Line 5: `execute` needs an **array**: `$s->execute([$max]);`.
+5. (Bonus) Line 7: missing `;` after `'<br>'`, and the name should be escaped with `h()`.
+
+Fixing them in order teaches the usual sequence: parse errors first (nothing runs until they are fixed), then fatal errors, then warnings, then logic.
+</Solution>
+</Exercise>

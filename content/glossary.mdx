@@ -1,0 +1,203 @@
+Every term from the course and this wiki, in alphabetical order. Press <kbd>Ctrl</kbd> + <kbd>K</kbd> to jump to a letter.
+
+## A–C
+
+**Apache**: the web server in XAMPP. Receives HTTP requests and hands `.php` files to PHP. See [How the web works](/wiki/how-the-web-works).
+
+**Array**: a variable that holds many values, either numbered (indexed) or named (associative). See [Arrays](/wiki/php-arrays).
+
+**Associative array**: an array with named keys, like `['email' => 'a@b.de']`. A database row is one.
+
+**Authentication**: proving *who* you are (password, 2FA code).
+
+**Authorisation**: deciding what you are *allowed* to do (member vs admin).
+
+**AUTO_INCREMENT**: a MySQL column option that gives each new row the next number automatically.
+
+**Backend**: the part of an application that runs on the server (PHP, MySQL).
+
+**Base32**: a way to write bytes using only A–Z and 2–7, used for authenticator secrets.
+
+**bcrypt**: the slow, salted password hashing algorithm behind `password_hash()`.
+
+**BLOB**: a database column type for binary data such as images (`LONGBLOB` in SMW).
+
+**Bootstrap**: a CSS and JavaScript library of ready-made layout and components. See [Kraftwerk: frontend](/wiki/fitness-frontend).
+
+**Brute force**: trying many passwords or codes automatically until one works. Defended by lockout and slow hashes.
+
+**Cache**: a stored copy to avoid downloading or computing again. Browsers cache CSS, which is why the fitness site adds `?v=` to its stylesheet URL.
+
+**CDN (Content Delivery Network)**: servers around the world that deliver files like Bootstrap or photos quickly.
+
+**Client**: the program that sends requests, usually the browser.
+
+**Concatenation**: joining strings with `.` in PHP.
+
+**Constant**: a named value that cannot change: `const ISSUER = 'Kraftwerk';`.
+
+**Cookie**: a small piece of text the server stores in the browser, sent back with every request.
+
+**CRUD**: Create, Read, Update, Delete: the four basic data operations.
+
+**CSRF (Cross-Site Request Forgery)**: an attack where another site makes your browser send a request to our site with your cookies.
+
+**CSS**: the language that styles HTML (colours, layout, animation).
+
+**CSS variable**: a named value in CSS, `--brand: #ff5a1f;`, used with `var(--brand)`.
+
+## D–H
+
+**Data URI**: a file embedded directly in HTML as text, e.g. `data:image/jpeg;base64,...`. SMW uses it for student photos.
+
+**Database**: an organised, permanent store of data; here MySQL/MariaDB. See [Relational databases](/wiki/databases-sql).
+
+**DECIMAL**: an exact number type for money.
+
+**Destructuring**: unpacking an array into variables: `[$a, $b] = $pair;`.
+
+**Document root**: the folder Apache serves from, `C:\xampp\htdocs`.
+
+**DOM**: the browser's live, in-memory version of the HTML, which JavaScript can change.
+
+**echo**: the PHP statement that outputs text.
+
+**Escaping**: converting special characters so they are shown as text, not interpreted. `htmlspecialchars()` for HTML.
+
+**Exception**: an error object PHP *throws*; you can `catch` it with `try { } catch { }`.
+
+**Foreign key**: a column that refers to the primary key of another table, linking rows. `members.plan_id → plans.id`.
+
+**Form**: an HTML element that sends user input to the server.
+
+**Frontend**: what runs in the browser (HTML, CSS, JavaScript).
+
+**GET**: the HTTP method for reading. Data travels in the URL.
+
+**Guard**: code at the top of a page that stops unauthorised users, e.g. `require_admin();`.
+
+**Hash**: a one-way fingerprint of data. Passwords are stored as hashes.
+
+**HMAC**: a hash that mixes in a secret key; the core of TOTP codes.
+
+**htdocs**: XAMPP's web folder. Only files here are reachable at `http://localhost/…`.
+
+**HTML**: the language that describes the structure of a web page.
+
+**HTTP / HTTPS**: the protocol browsers and servers use to talk. HTTPS is the encrypted version.
+
+**HttpOnly**: a cookie flag that hides the cookie from JavaScript.
+
+## I–P
+
+**IDOR (Insecure Direct Object Reference)**: accessing someone else's data by changing an ID in the URL. Prevented by ownership checks.
+
+**include / require**: PHP statements that insert another file's code.
+
+**Index (array)**: the position number of an item, starting at 0.
+
+**InnoDB**: the MySQL storage engine that supports foreign keys and transactions.
+
+**IntersectionObserver**: a browser API that reports when an element scrolls into view; used for the fitness site's reveal animations.
+
+**JOIN**: an SQL operation combining rows of two tables by matching keys.
+
+**JavaScript**: the programming language that runs in the browser.
+
+**JSON**: a text format for data, `{"name": "Anna"}`. `json_encode()` converts PHP values to it.
+
+**localhost**: "this computer". During the course, browser and server are the same laptop.
+
+**Lockout**: blocking login for a while after too many failures.
+
+**MariaDB**: the MySQL-compatible database server in XAMPP.
+
+**match**: PHP 8 expression that picks a value by strict comparison, like a compact `switch`.
+
+**Mobile-first**: designing for small screens first and adding layout for bigger ones.
+
+**mysqli**: PHP's MySQL extension, used procedurally in the course.
+
+**Normalisation**: storing each fact once and linking to it, instead of repeating it.
+
+**NULL**: "no value", in both PHP (`null`) and SQL (`NULL`, tested with `IS NULL`).
+
+**Overlay**: a semi-transparent layer over a photo so text on it stays readable.
+
+**PDO**: PHP Data Objects, a database interface with simple prepared statements.
+
+**phpMyAdmin**: a web interface for managing MySQL databases, at `http://localhost/phpmyadmin`.
+
+**Placeholder**: a `?` or `:name` in a prepared statement where a value will go.
+
+**POST**: the HTTP method for sending data that changes something. Data travels in the request body.
+
+**Prepared statement**: SQL sent separately from its values, which prevents SQL injection. See [PHP + MySQL](/wiki/php-mysql#sql-injection).
+
+**Primary key**: the column that uniquely identifies each row.
+
+**PRG (Post/Redirect/Get)**: after handling a POST, redirect so a reload does not resend it.
+
+**Provisioning URI**: the `otpauth://` address inside the 2FA QR code.
+
+## Q–Z
+
+**QR code**: a 2D barcode; here it carries the authenticator secret to the phone.
+
+**Query string**: the part of a URL after `?`, e.g. `?t=users`, available in `$_GET`.
+
+**Redirect**: telling the browser to load another URL (HTTP 302, `header('Location: …')`).
+
+**Relational database**: a database of tables linked by keys.
+
+**Responsive design**: a layout that adapts to screen size.
+
+**Role**: a user's permission level (`member`, `admin`).
+
+**Salt**: random data mixed into a password before hashing so equal passwords get different hashes.
+
+**SameSite**: a cookie flag that stops the cookie being sent on requests from other sites.
+
+**Scope**: where a variable is visible. Function variables are local to the function.
+
+**Semantic HTML**: tags that describe meaning: `header`, `nav`, `main`, `section`, `footer`.
+
+**Server**: a program (or computer) that answers requests.
+
+**Session**: per-visitor data stored on the server, found through a session cookie. See [Sessions](/wiki/sessions-login).
+
+**Session fixation**: an attack that plants a known session ID; prevented by `session_regenerate_id()`.
+
+**SQL**: the language for querying and changing relational databases.
+
+**SQL injection**: an attack where input changes the SQL command. Prevented by prepared statements.
+
+**Status code**: the number in an HTTP response (200, 302, 403, 404, 500).
+
+**Superglobal**: an array PHP fills on every request: `$_GET`, `$_POST`, `$_SESSION`, `$_SERVER`, `$_FILES`, `$_COOKIE`.
+
+**switch**: a statement that jumps to the `case` matching a value.
+
+**Ternary operator**: `condition ? a : b`, a one-line if/else that returns a value.
+
+**Three-tier architecture**: presentation (browser), logic (PHP), data (MySQL).
+
+**TOTP (Time-based One-Time Password)**: the 6-digit, 30-second codes in Google Authenticator. See [Hashing & 2FA](/wiki/passwords-2fa).
+
+**Two-factor authentication (2FA)**: login that needs two kinds of proof, e.g. password + phone.
+
+**Type juggling**: PHP converting types automatically, e.g. `"5" + 3 = 8`.
+
+**UNIQUE**: a column constraint forbidding duplicate values.
+
+**URL**: a web address: protocol, host, path, query, fragment.
+
+**UTF-8 / utf8mb4**: text encodings that support every language and emoji. Use `utf8mb4` in MySQL.
+
+**Validation**: checking input is acceptable before using it.
+
+**var_dump**: PHP function that shows a value's type and content; the main debugging tool.
+
+**XAMPP**: the package with Apache, MariaDB, PHP and Perl for local development. See [Setting up XAMPP](/wiki/setup-xampp).
+
+**XSS (Cross-Site Scripting)**: an attack where unescaped input runs as JavaScript in other users' browsers.

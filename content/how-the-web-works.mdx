@@ -1,0 +1,162 @@
+<Goals>
+- What a client and a server are, and why the web needs both
+- What really happens between typing a URL and seeing a page
+- HTTP requests and responses: methods, URLs, headers, status codes
+- Where HTML, CSS, JavaScript, PHP and MySQL each run
+- Why PHP code is never visible in the browser
+</Goals>
+
+## Clients and servers
+
+The web is a conversation between two kinds of programs.
+
+- A **client** asks for things. In this course the client is always a **web browser** such as Chrome or Edge.
+- A **server** answers. It is a program that waits for requests and sends back responses. In XAMPP that program is **Apache**.
+
+The two usually run on different computers connected over the internet. During the course they run on the *same* computer: your laptop is both the client (the browser) and the server (Apache). That is why the address starts with `localhost`, which simply means "this computer".
+
+<Mochi>
+Think of a restaurant. You (the browser) sit at a table and order from the menu. The waiter (Apache) takes your order to the kitchen. The cook (PHP) prepares the dish, fetching ingredients from the pantry (MySQL). The waiter brings you the finished plate (HTML). You never see the kitchen, only the plate.
+</Mochi>
+
+## Watch one request
+
+Press play. Every page in the SMW project and the fitness site follows exactly these six steps.
+
+<RequestVideo />
+
+## Step by step: what happens when you open a page
+
+Say you type `http://localhost/smw/index.php` and press Enter.
+
+1. **The browser reads the URL.** It splits it into parts: the protocol `http`, the host `localhost`, and the path `/smw/index.php`.
+2. **It connects to the server.** For `localhost` that is your own laptop on port 80, where Apache listens.
+3. **It sends an HTTP request.** This is plain text, roughly:
+   ```text
+   GET /smw/index.php HTTP/1.1
+   Host: localhost
+   Accept: text/html
+   ```
+4. **Apache finds the file.** It maps the path to a folder on disk: `/smw/index.php` becomes `C:\xampp\htdocs\smw\index.php`.
+5. **Apache sees the `.php` ending** and does not send the file as it is. It hands it to the **PHP interpreter** instead.
+6. **PHP runs the code from top to bottom.** If the code asks MySQL for data, PHP waits for the answer, then mixes the data into HTML.
+7. **Apache sends an HTTP response** containing that HTML:
+   ```text
+   HTTP/1.1 200 OK
+   Content-Type: text/html; charset=UTF-8
+
+   <!DOCTYPE html><html> ... </html>
+   ```
+8. **The browser draws the page.** While doing so it finds links to CSS, images and JavaScript and sends a *new request for each one*.
+
+<Note title="Static vs dynamic files">
+A `.html`, `.css` or `.jpg` file is **static**: Apache sends it exactly as it is on disk. A `.php` file is **dynamic**: it is a program, and Apache sends what the program *outputs*. That is why the same `index.php` can show different students to different people.
+</Note>
+
+## Anatomy of a URL
+
+```text
+http://localhost:80/fitness_center/admin.php?t=users#top
+└─┬─┘  └───┬───┘└┬┘└──────────┬─────────────┘└──┬──┘└┬┘
+protocol  host  port         path            query fragment
+```
+
+| Part | Meaning | In PHP |
+| --- | --- | --- |
+| Protocol | `http` or `https` (encrypted) | `$_SERVER['HTTPS']` |
+| Host | Which computer to ask | `$_SERVER['HTTP_HOST']` |
+| Port | Which program on that computer (80 = web) | rarely needed |
+| Path | Which file or page | `$_SERVER['SCRIPT_NAME']` |
+| Query string | Extra data as `name=value` pairs, after `?`, joined by `&` | `$_GET['t']` |
+| Fragment | A position inside the page, after `#`. **Never sent to the server.** | not available |
+
+The query string is the first way to send data to PHP. The fitness admin panel uses it to choose a tab: `admin.php?t=users` and `admin.php?t=plans` are the same file, and PHP reads `$_GET['t']` to decide what to show.
+
+## HTTP methods
+
+Every request has a **method** that says what the client wants to do. The course uses two:
+
+| Method | Used for | Where the data goes | Example |
+| --- | --- | --- | --- |
+| `GET` | Reading a page | In the URL (query string) | Opening a page, clicking a link, a search |
+| `POST` | Sending data that changes something | In the request body, hidden from the URL | Registering, logging in, adding a student |
+
+Rule of thumb: if a request **changes data** (insert, update, delete, login), use `POST`. `GET` requests can be bookmarked, cached and repeated by the browser, which is exactly what you do not want for "delete this student".
+
+<Warning>
+The professor's `delete_contact.php` deletes a row with a `GET` link (`delete_contact.php?ID_Contact=5`). It works, but anyone who gets you to open that link deletes a row. The fitness site uses small `POST` forms for every delete button instead. You will see why in [Web security essentials](/wiki/web-security).
+</Warning>
+
+## Status codes
+
+The first line of every response contains a number that tells the browser how it went.
+
+| Code | Name | When you will see it |
+| --- | --- | --- |
+| 200 | OK | Everything worked. |
+| 302 | Found (redirect) | PHP called `header('Location: ...')`. The browser immediately requests the new URL. |
+| 403 | Forbidden | You are not allowed. The fitness site sends this when a member opens `admin.php`. |
+| 404 | Not Found | The file does not exist. Usually a typo in the URL or file name. |
+| 500 | Internal Server Error | PHP crashed. Look at the error message or the Apache error log. |
+
+You can see all of this yourself: open the browser's developer tools (<kbd>F12</kbd>), go to the **Network** tab and reload the page. Every line is one request. Click one to see its method, status, headers and response.
+
+## Who runs what
+
+This is the single most important idea of the whole course, and the cause of many beginner bugs.
+
+| Runs on the **server** (Apache + PHP) | Runs in the **browser** |
+| --- | --- |
+| PHP code | HTML (structure) |
+| SQL queries to MySQL | CSS (looks) |
+| Reading `$_POST`, `$_SESSION`, files | JavaScript (behaviour after the page loaded) |
+| Password checks, permissions | Bootstrap components, animations |
+
+Consequences you should remember:
+
+- **PHP finishes before the browser sees anything.** PHP cannot react to a click after the page is shown. A click must send a *new* request (a link or a form), and PHP runs again.
+- **The browser never sees PHP code**, only its output. Right-click a page and choose *View page source*: you see HTML, never `<?php`.
+- **Anything in the browser can be changed by the user.** Hidden fields, JavaScript checks and disabled buttons can all be edited in the developer tools. Every important check must happen again in PHP.
+
+<Mochi>
+Front-end checks are like a "please wipe your feet" sign. Polite people follow it, but the actual lock on the door (PHP) is what keeps people out.
+</Mochi>
+
+## Statelessness: why we need sessions
+
+HTTP has no memory. Each request stands alone; the server does not automatically know that request 2 came from the same person as request 1. So how does a website remember that you logged in?
+
+The answer is **cookies and sessions**: the server gives the browser a random ID in a cookie, the browser sends it back with every request, and PHP uses it to find your stored data. That is the topic of [Sessions & login systems](/wiki/sessions-login). For now, just remember: *the web forgets everything between requests unless we deliberately store it.*
+
+## Web application architecture
+
+Putting it together, the architecture from the professor's slides looks like this:
+
+```text
+ Browser (client)                 Your laptop running XAMPP (server)
+┌──────────────────┐   HTTP     ┌───────────────────────────────────────────┐
+│ HTML  CSS  JS    │ ─────────▶ │ Apache ──▶ PHP ──▶ MySQL / MariaDB        │
+│                  │ ◀───────── │        ◀──     ◀──  (tables: users, ...)  │
+└──────────────────┘   HTML     └───────────────────────────────────────────┘
+   presentation tier                 application tier        data tier
+```
+
+This is called a **three-tier architecture**: presentation (browser), application logic (PHP) and data (MySQL). Each tier only talks to its neighbour. The browser never talks to MySQL directly, which is one reason it is safe to keep passwords in the database.
+
+<Exercise title="Inspect a real request">
+1. Start Apache in the XAMPP Control Panel and open `http://localhost/dashboard/`.
+2. Press <kbd>F12</kbd>, open the **Network** tab and reload.
+3. Answer: how many requests did the page make? Which one returned HTML? What status code did it have? Which requests were for CSS or images?
+
+<Solution>
+The first request (for `/dashboard/`) returns the HTML with status **200**. Its **Type** column says `document`. After that you will see several more requests: `stylesheet` for CSS files, `png`/`svg` for images and `script` for JavaScript. Each one is a separate HTTP request that the browser made *because the HTML mentioned it*. If any shows **404**, a file is missing. Reloading with the cache enabled may show some as "(memory cache)", which means the browser did not ask the server again.
+</Solution>
+</Exercise>
+
+<Exercise title="Predict the method">
+For each action, decide whether it should be `GET` or `POST`: (a) showing the list of plans, (b) searching students by name, (c) saving a contact message, (d) logging out, (e) deleting a member.
+
+<Solution>
+(a) **GET**: it only reads. (b) **GET**: a search reads data, and a GET search can be bookmarked (`?term=anna`). The professor's search uses POST, which also works. (c) **POST**: it writes a row. (d) **POST**: it changes state (your session). In the fitness site logout is a POST form that also requires the Authenticator code. (e) **POST**: it deletes data and must never happen just by following a link.
+</Solution>
+</Exercise>

@@ -1,0 +1,164 @@
+<Goals>
+- What Bootstrap is and how its grid, components and utility classes are used
+- How the site's own `style.css` layers branding on top of Bootstrap
+- The dark theme: Bootstrap's `data-bs-theme` plus CSS variables
+- Photos with overlays, hover effects and responsive images
+- `site.js`: scroll reveals, counters, the navbar effect, and respecting "reduce motion"
+- The design checks done before calling it finished
+</Goals>
+
+## Two layers of styling
+
+```text
+bootstrap.min.css   (from a CDN)    → grid, buttons, forms, navbar, tables, utilities
+style.css           (our file)      → brand colours, fonts, hero, cards, overlays, animations
+site.js             (our file)      → behaviour that CSS cannot do alone
+```
+
+Bootstrap provides tested building blocks; `style.css` makes them look like Kraftwerk. Because `style.css` is loaded **after** Bootstrap, its rules win when both style the same thing.
+
+## Bootstrap in ten minutes
+
+Bootstrap is a CSS (and JS) library. You link it, then use its class names in your HTML.
+
+### The grid
+
+Pages are built from `container` → `row` → `col`. A row has **12 columns**; you say how many each box takes, and at which screen size:
+
+```html
+<div class="container">
+  <div class="row g-4">                       <!-- g-4 = gap between columns -->
+    <div class="col-md-6 col-lg-4"> ... </div> <!-- full width on phones, half from 768px, a third from 992px -->
+    <div class="col-md-6 col-lg-4"> ... </div>
+    <div class="col-md-6 col-lg-4"> ... </div>
+  </div>
+</div>
+```
+
+| Prefix | Applies from | Typical device |
+| --- | --- | --- |
+| (none) `col-6` | 0 px | all |
+| `sm` | 576 px | large phones |
+| `md` | 768 px | tablets |
+| `lg` | 992 px | laptops |
+| `xl` | 1200 px | desktops |
+
+This is **mobile-first**: without a prefix, columns stack on small screens, and you add prefixes to place them side by side on bigger ones. The pricing cards are `col-md-6 col-lg-4`: one per row on phones, two on tablets, three on laptops.
+
+### Components and utilities
+
+| You write | You get |
+| --- | --- |
+| `btn btn-primary`, `btn btn-outline-light` | styled buttons |
+| `navbar navbar-expand-lg` + `collapse` | a menu that collapses into a hamburger below 992 px |
+| `form-control`, `form-select`, `form-floating` | styled inputs, floating labels |
+| `table table-hover` | tables with row hover |
+| `alert alert-danger`, `badge bg-success` | messages and labels |
+| `d-flex gap-3`, `justify-content-between` | flexbox layout without writing CSS |
+| `mb-3`, `px-4`, `py-5` | margin/padding (`m`/`p`, side `t b s e x y`, size 0–5) |
+| `text-center`, `fw-bold`, `text-muted` | text utilities |
+
+The navbar's mobile menu is driven by Bootstrap's JavaScript (`bootstrap.bundle.min.js`) through `data-bs-toggle="collapse"` and `data-bs-target="#nav"`: no code of your own needed.
+
+## The dark theme
+
+Bootstrap 5.3 has a built-in dark mode. One attribute on the `<html>` tag switches every component:
+
+```html
+<html lang="en" data-bs-theme="dark">
+```
+
+`style.css` then adjusts Bootstrap's colour variables and defines its own:
+
+<Source file="Project/fitness_center/style.css" from={1} to={13} lang="css" />
+
+**CSS variables** (`--brand`, `--surface`, …) are named values you define once and use everywhere with `var(--brand)`. Changing the orange in one line recolours buttons, links, badges and borders across the site. This is the same idea as PHP constants, applied to design.
+
+<Tip title="Why inputs were hard to see at first">
+On a dark page, a form field with no visible border disappears. The fix was to give fields their own darker background (`--field`) and a lighter border (`--field-line`), plus an orange focus ring. Always test forms in the theme you ship.
+</Tip>
+
+## Photos and overlays
+
+Photos come from **Unsplash's image CDN** with size and format in the URL (`?w=700&q=70&auto=format`), so phones download smaller files and browsers that support WebP/AVIF get them automatically:
+
+```php
+function photo($id, $w) { return "https://images.unsplash.com/photo-$id?w=$w&q=70&auto=format&fit=crop"; }
+```
+
+Text on photos needs an **overlay** to stay readable. The program cards use a dark gradient layer (`::after`) between photo and text, which turns orange-tinted on hover while the photo slowly zooms:
+
+<Source file="Project/fitness_center/style.css" from={73} to={83} lang="css" />
+
+Things to notice:
+
+- `overflow: hidden` on the card clips the zooming image to the rounded corners.
+- Only `transform` and `opacity` are animated. Browsers can animate those smoothly on the graphics card; animating `width`, `height` or `top` causes stutter.
+- `@media (hover: none)` detects touch screens, which have no hover. There the description is shown permanently, so phone users are not missing content.
+- Every content image has `alt` text and `loading="lazy"` (loads when scrolled near), plus `width`/`height` to reserve space.
+
+## site.js: motion with purpose
+
+<Source file="Project/fitness_center/site.js" />
+
+| Part | How it works |
+| --- | --- |
+| Scroll reveals | Elements have `data-reveal="up"`, `"left"`, `"right"` or `"zoom"`. CSS starts them slightly moved and transparent. An `IntersectionObserver` adds the class `show` when they enter the screen, and CSS transitions them into place. |
+| Stagger | Cards in a row get `style="--d:.1s"`, `.2s`, … used as `transition-delay`, so they appear one after another. |
+| Counters | Numbers with `data-to="1500"` count up with `requestAnimationFrame` and an ease-out curve when they appear. |
+| Navbar | Adds the class `scrolled` after 30 px, which makes it solid and smaller. |
+| Parallax | The hero photo moves at 30% of the scroll speed. |
+| Reduced motion | `matchMedia('(prefers-reduced-motion: reduce)')`: users who asked their system for less motion get no parallax and instant numbers; CSS disables transitions for them too. |
+
+<Note title="Content must not depend on JavaScript">
+The hidden starting state is only applied when the page has the class `js`, which a tiny script in `<head>` adds. If JavaScript fails to load, the class is missing and everything is simply visible. Animations are decoration; content is not.
+</Note>
+
+<Source file="Project/fitness_center/style.css" from={128} to={134} lang="css" />
+
+## The finishing checklist
+
+Before the design was called finished, every page was checked at three widths (desktop 1366 px, tablet 768 px, phone 375 px). Real bugs found and fixed that way:
+
+| Bug | Cause | Fix |
+| --- | --- | --- |
+| Page wider than the phone, menu button off-screen | Bootstrap `g-5` gutters wider than the container padding; slide-in animations starting outside the screen | `g-4 g-lg-5`, and `overflow-x: clip` on `main` |
+| Open phone menu unreadable over the photo | Transparent navbar | Solid background when the menu is open (`:has(.show)`) |
+| Tall stretched photos | The HTML `height` attribute overrode `aspect-ratio` | `height: auto` on those images |
+| Gap in the photo gallery grid | Tile spans did not add up to 12 cells | Recalculated the spans |
+| Old styles after an update | Browser cache | `style.css?v=<filemtime>` |
+| Typed text hidden under floating labels | Bootstrap's label background patch | Made the patch transparent |
+
+<Mochi>
+Most design bugs only show up at a size you did not test. Make it a habit: before you say "done", look at the page on your phone (or the browser's device toolbar, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> in DevTools).
+</Mochi>
+
+<Exercise title="Add a 'Trainers' section">
+Add a section to `index.php` with three trainer cards (photo, name, speciality) that use the existing `tile` overlay style and fade in with a stagger. Use only existing CSS classes.
+
+<Solution>
+```php
+<?php $trainers = [
+  ['1594737625785-a6cbdabd333c', 'Lena', 'Strength & powerlifting'],
+  ['1571019613454-1cb2f99b2d8b', 'Mara', 'Yoga & mobility'],
+  ['1581009146145-b5ef050c2e1e', 'Jonas', 'HIIT & conditioning'],
+]; ?>
+<section class="section pt-0">
+  <div class="container">
+    <div class="text-center mb-5" data-reveal="up"><span class="eyebrow">Coaches</span><h2 class="display-5 fw-bold">Meet the team</h2></div>
+    <div class="row g-4">
+      <?php foreach ($trainers as $k => [$img, $name, $spec]): ?>
+      <div class="col-md-4" data-reveal="up" style="--d:<?= $k * .1 ?>s">
+        <div class="tile program">
+          <img src="<?= photo($img, 600) ?>" alt="Coach <?= h($name) ?>" loading="lazy" width="600" height="800">
+          <div class="tile-body"><h3 class="h4 mb-1"><?= h($name) ?></h3><p class="text-white-75 small mb-0"><?= h($spec) ?></p></div>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+</section>
+```
+Everything visual comes from existing classes (`tile`, `program`, `eyebrow`, `data-reveal`), which is the payoff of building a small design system instead of styling each section separately.
+</Solution>
+</Exercise>

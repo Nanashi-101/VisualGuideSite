@@ -1,0 +1,205 @@
+<Goals>
+- Arithmetic, comparison and logical operators, including `==` vs `===`
+- Making decisions with `if`, `elseif`, `else`
+- Choosing between many values with `switch` and the modern `match`
+- Handy shortcuts: the ternary `? :` and the null-coalescing `??`
+- How the fitness site uses each of these for real decisions
+</Goals>
+
+## Why programs need decisions
+
+A program that always does the same thing is not very useful. Is the password correct? Is the user an admin? Is the field empty? Every one of those questions is a **condition** that is either `true` or `false`, and the program takes a different path depending on the answer.
+
+## Operators
+
+### Arithmetic
+
+| Operator | Meaning | Example |
+| --- | --- | --- |
+| `+ - * /` | Add, subtract, multiply, divide | `$price * 12` |
+| `%` | Remainder after division | `10 % 3` is `1`; `$n % 2 === 0` means "even" |
+| `**` | Power | `2 ** 10` is `1024` |
+| `++` / `--` | Add / subtract one | `$i++` |
+| `+= -= *= .=` | Change and store | `$total += $price;` |
+
+### Comparison
+
+| Operator | True when | Example |
+| --- | --- | --- |
+| `==` | Equal **after** type conversion | `"5" == 5` → true |
+| `===` | Equal **and** the same type | `"5" === 5` → false |
+| `!=` / `!==` | Not equal (loose / strict) | `$role !== 'admin'` |
+| `<  >  <=  >=` | Less / greater (or equal) | `$grade >= 90` |
+| `<=>` | "Spaceship": -1, 0 or 1 | used for sorting |
+
+<Tip title="Prefer === and !==">
+Strict comparison avoids surprises from automatic conversion. The fitness site uses `===` everywhere it compares strings, for example `$_SERVER['REQUEST_METHOD'] === 'POST'` and `me()['role'] === 'admin'`.
+</Tip>
+
+### Logical
+
+| Operator | Meaning | True when |
+| --- | --- | --- |
+| `&&` (or `and`) | AND | both sides are true |
+| `\|\|` (or `or`) | OR | at least one side is true |
+| `!` | NOT | the value is false |
+
+PHP stops evaluating as soon as the answer is known (**short-circuit evaluation**). This matters in code like the login check:
+
+```php
+if ($u && password_verify($_POST['password'] ?? '', $u['password_hash'])) {
+```
+
+If no user was found, `$u` is `false`, so PHP never runs `password_verify`, and never tries to read `$u['password_hash']` from something that does not exist.
+
+### Truthy and falsy
+
+In a condition, these values count as **false**: `false`, `0`, `0.0`, `""` (empty string), `"0"`, `[]` (empty array) and `null`. Everything else counts as **true**. That is why `if ($row)` works after fetching a database row: no row means `false`.
+
+## if, elseif, else
+
+```php
+if (condition) {
+    // runs when the condition is true
+} elseif (another condition) {
+    // runs when the first was false and this one is true
+} else {
+    // runs when nothing above was true
+}
+```
+
+PHP checks the conditions **from top to bottom** and runs the **first** block whose condition is true. The rest are skipped, even if they would also be true. Move the slider and watch:
+
+<GradeDemo />
+
+That is why the order matters: put the strictest condition first. If you checked `$g >= 50` first, a grade of 95 would be labelled "D". The professor's grading example follows the same rule:
+
+<Source file="Learning/Procedural_PhP_week2/ConditionalStatement.php" />
+
+### Real decisions in the fitness site
+
+Validating registration input is a chain of `if / elseif`. The first problem found becomes the message; only when everything passes does the `else` save the user:
+
+<Source file="Project/fitness_center/register.php" from={4} to={20} />
+
+And the admin check is a single, important `if`:
+
+```php
+function require_admin() {
+    require_login();
+    if (me()['role'] !== 'admin') { http_response_code(403); exit('Admins only.'); }
+}
+```
+
+`exit` stops the whole script, so nothing after it runs for a non-admin.
+
+## switch
+
+When you compare **one value** against many fixed options, `switch` is tidier than a long `elseif` chain.
+
+<Source file="Learning/SimpleExcercises_week2/14 Switch.php" from={6} to={20} />
+
+How it works: PHP jumps to the `case` that matches, runs code until it hits `break`, and then leaves the switch. `default` runs when nothing matched.
+
+<Warning title="Forgetting break">
+Without `break`, PHP "falls through" and keeps running the next cases too. With `$favcolor = "red"` and no breaks you would see all three sentences plus the default. Sometimes fall-through is useful on purpose (several cases sharing code), but most often it is a bug.
+</Warning>
+
+The fitness admin panel uses `switch` to decide which action a form asked for. Each delete button sends a hidden field `do` with a different value:
+
+<Source file="Project/fitness_center/admin.php" from={13} to={31} />
+
+Note that `switch` uses **loose** comparison (`==`).
+
+## match (PHP 8)
+
+`match` is a stricter, shorter `switch` that **returns a value**:
+
+```php
+$label = match (true) {
+    $g >= 90 => 'A (Excellent)',
+    $g >= 80 => 'B (Very Good)',
+    $g >= 70 => 'C (Good)',
+    $g >= 50 => 'D (Satisfactory)',
+    default  => 'F (Fail)',
+};
+
+$badge = match ($role) {
+    'admin'  => 'bg-primary',
+    'member' => 'bg-secondary',
+};
+```
+
+`match` uses strict comparison, needs no `break`, and throws an error if no arm matches and there is no `default`. That makes mistakes loud instead of silent.
+
+## Shortcuts
+
+### Ternary operator
+
+`condition ? valueIfTrue : valueIfFalse` is a one-line `if/else` that produces a value. Perfect inside HTML:
+
+```php
+<span class="badge <?= $r['role'] === 'admin' ? 'bg-primary' : 'bg-secondary' ?>"><?= h($r['role']) ?></span>
+```
+
+### Null-coalescing ??
+
+`$a ?? $b` gives `$a` if it exists and is not `null`, otherwise `$b`. It never warns about missing keys, which makes it ideal for reading form fields that might not have been sent:
+
+```php
+$email = trim($_POST['email'] ?? '');     // '' if the form had no email field
+$t = $_GET['t'] ?? 'users';               // default tab
+```
+
+Before PHP 7 you had to write `isset($_POST['email']) ? $_POST['email'] : ''`. Both mean the same.
+
+<Mochi>
+`??` is like asking "is there something in this jar? If not, use this spare one." It stops PHP complaining when a jar was never created at all.
+</Mochi>
+
+## Common mistakes
+
+| Mistake | What happens | Fix |
+| --- | --- | --- |
+| `if ($role = 'admin')` | **Assigns** 'admin' and is always true. Everyone becomes admin! | Use `===` to compare. |
+| `else if` vs `elseif` | Both work with braces; mixing styles confuses readers | Pick `elseif`. |
+| Missing braces on two lines | Only the first line belongs to the `if` | Always use `{ }`. |
+| Wrong order of ranges | A broad condition catches everything first | Check the narrowest case first. |
+
+<Exercise title="Opening hours">
+Write a page that uses the current day (`date('N')`: 1 = Monday … 7 = Sunday) and hour (`date('G')`) to print one of: "Staffed now (Mon–Fri 7–22)", "Open for members only (24/7 access)". Use `if/elseif/else` with `&&`.
+
+<Solution>
+```php:hours.php
+<?php
+$day  = (int) date('N');   // 1..7
+$hour = (int) date('G');   // 0..23
+
+if ($day <= 5 && $hour >= 7 && $hour < 22) {
+    echo 'Staffed now (Mon–Fri 7–22)';
+} else {
+    echo 'Open for members only (24/7 access)';
+}
+```
+Converting with `(int)` makes the comparisons numeric and the intent clear. `$hour < 22` (not `<=`) means the staff go home at exactly 22:00.
+</Solution>
+</Exercise>
+
+<Exercise title="Price by plan">
+Given `$plan = 'Student';`, use `match` to set `$price` (Basic 24.90, Premium 39.90, Student 19.90) and print it. What happens if `$plan` is `'Gold'` and there is no `default` arm? Add one that sets the price to `null` and prints "Unknown plan".
+
+<Solution>
+```php
+<?php
+$plan = 'Student';
+$price = match ($plan) {
+    'Basic'   => 24.90,
+    'Premium' => 39.90,
+    'Student' => 19.90,
+    default   => null,
+};
+echo $price === null ? 'Unknown plan' : number_format($price, 2, ',', '.') . ' €';
+```
+Without `default`, `'Gold'` throws an `UnhandledMatchError` and the page stops. That is a feature: you learn about the missing case immediately instead of silently getting a wrong price.
+</Solution>
+</Exercise>
