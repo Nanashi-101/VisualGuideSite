@@ -59,14 +59,14 @@ export function Search({ index }: { index: SearchItem[] }) {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="flex min-h-10 w-full max-w-xs items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 text-sm text-[var(--muted)] transition hover:border-[var(--accent)]/50" aria-label="Search the wiki">
+      <button onClick={() => setOpen(true)} className="flex min-h-10 w-full max-w-xs items-center gap-2 glass rounded-xl px-3 text-sm text-[var(--muted)] transition hover:border-[var(--accent)]/50" aria-label="Search the wiki">
         <SearchIcon size={16} /><span className="hidden sm:inline">Search the wiki…</span>
         <kbd className="ml-auto hidden rounded border border-[var(--line)] px-1.5 text-[11px] sm:inline">Ctrl K</kbd>
       </button>
       {mounted && createPortal(<AnimatePresence>
         {open && (
           <motion.div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 p-4 pt-[12vh] backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setOpen(false)}>
-            <motion.div role="dialog" aria-modal="true" aria-label="Search" className="w-full max-w-xl overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-2xl"
+            <motion.div role="dialog" aria-modal="true" aria-label="Search" className="w-full max-w-xl overflow-hidden glass glass-strong rounded-2xl shadow-2xl"
               initial={{ y: -12, scale: 0.98 }} animate={{ y: 0, scale: 1 }} exit={{ y: -8, opacity: 0 }} transition={{ duration: 0.18 }} onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center gap-3 border-b border-[var(--line)] px-4">
                 <SearchIcon size={18} className="text-[var(--muted)]" />
@@ -136,21 +136,18 @@ function SideNav({ onPick }: { onPick?: () => void }) {
   );
 }
 
-export function Sidebar() {
-  return <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-64 shrink-0 overflow-y-auto py-8 pr-4 lg:block"><SideNav /></aside>;
-}
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const mounted = useMounted();
   return (
     <>
-      <button onClick={() => setOpen(true)} className="icon-btn lg:hidden" aria-label="Open navigation"><Menu size={20} /></button>
+      <button onClick={() => setOpen(true)} className="flex min-h-10 items-center gap-2 rounded-xl px-2.5 text-sm font-medium text-[var(--ink)] transition hover:bg-[var(--soft)]" aria-label="Open chapters"><Menu size={18} /><span className="hidden md:inline">Chapters</span></button>
       {mounted && createPortal(<AnimatePresence>
         {open && (
-          <motion.div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setOpen(false)}>
-            <motion.div className="h-full w-[85%] max-w-xs overflow-y-auto bg-[var(--bg)] p-5 shadow-2xl" initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "tween", duration: 0.22 }} onClick={(e) => e.stopPropagation()}>
-              <div className="mb-6 flex items-center justify-between"><span className="brand text-lg">Code Garden</span><button onClick={() => setOpen(false)} className="icon-btn" aria-label="Close navigation"><X size={20} /></button></div>
+          <motion.div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setOpen(false)}>
+            <motion.div className="h-full w-[85%] max-w-xs overflow-y-auto glass glass-strong rounded-r-3xl p-5" initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "tween", duration: 0.22 }} onClick={(e) => e.stopPropagation()}>
+              <div className="mb-6 flex items-center justify-between"><span className="brand text-lg">Chapters</span><button onClick={() => setOpen(false)} className="icon-btn" aria-label="Close chapters"><X size={20} /></button></div>
               <SideNav onPick={() => setOpen(false)} />
             </motion.div>
           </motion.div>
@@ -166,8 +163,8 @@ export function Toc({ headings }: { headings: Heading[] }) {
   const active = useScrollSpy(ids);
   if (!headings.length) return null;
   return (
-    <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-56 shrink-0 overflow-y-auto py-10 xl:block">
-      <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">On this page</div>
+    <aside className="sticky top-28 hidden max-h-[calc(100vh-8rem)] w-56 shrink-0 self-start overflow-y-auto glass rounded-2xl p-4 xl:block">
+      <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">In this chapter</div>
       <ul className="space-y-1 border-l border-[var(--line)] text-[13px]">
         {headings.map((h) => (
           <li key={h.id}>
@@ -202,7 +199,7 @@ export function Progress({ total }: { total: number }) {
   const pct = Math.round((learned.length / total) * 100);
   const next = sections.flatMap((s) => s.articles).find((a) => !learned.includes(a.slug));
   return (
-    <div className="rounded-2xl border border-[var(--line)] bg-[var(--surface)] p-5 shadow-sm">
+    <div className="glass rounded-2xl p-5">
       <div className="flex items-center justify-between text-sm"><span className="font-semibold text-[var(--ink)]">Your progress</span><span className="text-[var(--muted)]">{learned.length} / {total} articles</span></div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--soft)]"><motion.div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-[var(--accent)]" initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.8 }} /></div>
       {next && <Link href={`/wiki/${next.slug}`} className="mt-4 flex items-center gap-2 text-sm font-medium text-[var(--accent)] hover:underline">Continue: {next.title}<ArrowRight size={15} /></Link>}

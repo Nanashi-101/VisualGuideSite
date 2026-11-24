@@ -22,13 +22,23 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-sans);
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px; color: var(--muted); transition: background .15s, color .15s; }
 .icon-btn:hover { background: var(--soft); color: var(--ink); }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 1.25rem; }
+/* Frosted glass: translucent fill, blur of what is behind, a light rim and a soft top highlight. */
+.glass { background: rgba(255,255,255,.55); border: 1px solid rgba(255,255,255,.7); -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: 0 8px 32px rgba(30,64,175,.08), inset 0 1px 0 rgba(255,255,255,.8); }
+.dark .glass { background: rgba(17,26,46,.45); border-color: rgba(148,163,184,.16); box-shadow: 0 8px 32px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06); }
+/* Denser glass for popups that sit over busy content, so text stays readable. */
+.glass-strong { background: rgba(255,255,255,.86); }
+.dark .glass-strong { background: rgba(15,23,42,.82); }
 .chip { display: inline-flex; align-items: center; gap: .3rem; padding: .2rem .7rem; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); font-size: .8rem; font-weight: 500; color: var(--ink); cursor: pointer; }
 }
 
 /* Article typography (the "prose" of the wiki) */
 .prose { color: var(--text); font-size: 1.0625rem; line-height: 1.8; }
 .prose > * + * { margin-top: 1.1em; }
-.prose h2 { color: var(--ink); font-size: 1.6rem; font-weight: 700; letter-spacing: -.01em; margin-top: 2.6em; padding-top: .6em; border-top: 1px solid var(--line); }
+.prose { counter-reset: h2; }
+.prose h2 { color: var(--ink); font-size: 1.65rem; font-weight: 700; letter-spacing: -.01em; margin-top: 2.8em; display: flex; align-items: center; gap: .75rem; }
+/* Numbered like chapters in a book, instead of documentation rules between sections. */
+.prose h2::before { counter-increment: h2; content: counter(h2, decimal-leading-zero); flex-shrink: 0; display: inline-grid; place-items: center; width: 2.4rem; height: 2.4rem; border-radius: 12px; font-size: .85rem; font-weight: 700; color: var(--accent); background: var(--soft); border: 1px solid var(--line); }
 .prose h3 { color: var(--ink); font-size: 1.2rem; font-weight: 650; margin-top: 2em; }
 .prose h4 { color: var(--ink); font-weight: 650; margin-top: 1.6em; }
 .prose h2 + *, .prose h3 + * { margin-top: .6em; }
@@ -49,5 +59,25 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-sans);
 .prose tr:last-child td { border-bottom: 0; }
 .code-block pre { background: transparent !important; font-family: var(--font-mono), ui-monospace, monospace; }
 .prose h2 .anchor, .prose h3 .anchor { opacity: 0; }
+
+/* Scroll reveal for article sections (classes added by ProseReveal) */
+.prose > .rv { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s cubic-bezier(.22,1,.36,1); }
+.prose > .rv.in { opacity: 1; transform: none; }
+
+/* Soft floating light in the background of every page */
+.ambient { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.ambient span { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .55; animation: drift 22s ease-in-out infinite alternate; }
+.ambient span:nth-child(1) { width: 38rem; height: 38rem; left: -12rem; top: -10rem; background: #dbeafe; }
+.ambient span:nth-child(2) { width: 30rem; height: 30rem; right: -10rem; top: 30vh; background: #e0e7ff; animation-duration: 28s; }
+.ambient span:nth-child(3) { width: 26rem; height: 26rem; left: 30%; bottom: -14rem; background: #cffafe; animation-duration: 34s; }
+.dark .ambient span { opacity: .22; }
+@keyframes drift { to { transform: translate(6rem, 4rem) scale(1.08); } }
+
+/* Home preloader */
+.preloader { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: var(--bg); transition: opacity .5s ease, visibility .5s; animation: preloader-failsafe .5s ease 3s forwards; }
+.preloader-out { opacity: 0; visibility: hidden; }
+.preloader-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: hop 1s ease-in-out infinite; }
+@keyframes hop { 0%, 100% { transform: translateY(0); opacity: .4; } 50% { transform: translateY(-6px); opacity: 1; } }
+@keyframes preloader-failsafe { to { opacity: 0; visibility: hidden; } }
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
