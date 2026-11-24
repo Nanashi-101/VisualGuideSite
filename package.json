@@ -18,7 +18,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "sync-sources": "node scripts/sync-sources.mjs"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.5",
